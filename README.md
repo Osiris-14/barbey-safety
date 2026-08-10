@@ -69,7 +69,7 @@ corrida; casi siempre será `0`, y eso es lo normal.
 
 ## Reglas de agenda
 
-- Turnos de 45 minutos, de 9:30 AM a 5:45 PM (12 turnos, sin pausa).
+- Turnos de 45 minutos, de 9:30 AM a 11:45 PM (20 turnos, sin pausa).
 - No hay días cerrados por regla fija: el barbero decide qué bloquear desde
   `/admin/blocked`. Solo se descartan las fechas pasadas.
 - Un día se marca como no disponible cuando **todos** sus horarios están

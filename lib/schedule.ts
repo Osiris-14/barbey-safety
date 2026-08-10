@@ -1,5 +1,5 @@
 /**
- * Turnos de 45 minutos, de 9:30 AM a 5:45 PM.
+ * Turnos de 45 minutos, de 9:30 AM a 11:45 PM.
  * Van con cero a la izquierda ("09:30", no "9:30") porque Postgres devuelve
  * las columnas `time` como "09:30:00" y comparamos estas cadenas directamente.
  */
@@ -16,6 +16,14 @@ export const TIME_SLOTS = [
   "16:15",
   "17:00",
   "17:45",
+  "18:30",
+  "19:15",
+  "20:00",
+  "20:45",
+  "21:30",
+  "22:15",
+  "23:00",
+  "23:45",
 ] as const;
 
 export const MONTH_NAMES = [
