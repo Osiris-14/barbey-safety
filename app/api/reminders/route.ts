@@ -24,10 +24,12 @@ const timeKey = (d: Date) =>
 export async function GET() {
   const nowRd = toRdClock(new Date());
 
-  // Ventana de 15 a 20 minutos por delante. El cron corre cada minuto, y
-  // reminder_sent evita que una cita reciba el aviso más de una vez.
-  const from = new Date(nowRd.getTime() + 15 * 60 * 1000);
-  const to = new Date(nowRd.getTime() + 20 * 60 * 1000);
+  // Objetivo: citas que empiezan en exactamente 15 minutos.
+  // Se busca entre +14 y +16 para dar 2 minutos de holgura, por si el cron
+  // se atrasa o se adelanta. reminder_sent evita el aviso duplicado cuando
+  // una misma cita cae dentro de la ventana en varias corridas seguidas.
+  const from = new Date(nowRd.getTime() + 14 * 60 * 1000);
+  const to = new Date(nowRd.getTime() + 16 * 60 * 1000);
 
   // La fecha sale de `from`, no de `nowRd`: si la ventana cruza medianoche,
   // buscamos en el día al que pertenecen las citas.
@@ -59,7 +61,7 @@ export async function GET() {
     try {
       const result = await sendWhatsApp(
         appointment.client_phone,
-        `⏰ Recordatorio: Hola ${appointment.client_name}, tu cita en *Yoan BarberShop* es en 15 minutos a las *${formatTime(
+        `⏰ Hola ${appointment.client_name}, tu cita en *Yoan BarberShop* es en 15 minutos a las *${formatTime(
           appointment.appointment_time
         )}*. ¡Te esperamos!`
       );
