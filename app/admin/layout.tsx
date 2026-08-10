@@ -2,8 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Ban, CalendarCheck, List, Menu, Scissors, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Ban,
+  CalendarCheck,
+  List,
+  LogOut,
+  Menu,
+  X,
+} from "lucide-react";
+import { supabaseAuth } from "@/lib/supabase-auth";
 
 const NAV = [
   { href: "/admin", label: "Inicio", icon: CalendarCheck },
@@ -17,7 +25,31 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    const { error } = await supabaseAuth.auth.signOut();
+    if (error) console.error("[logout] no se pudo cerrar sesión:", error);
+    router.replace("/admin/login");
+    router.refresh();
+  };
+
+  const signOutButton = (
+    <button
+      onClick={handleSignOut}
+      disabled={signingOut}
+      className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-edge px-3 text-xs text-content/50 transition hover:border-red-500/40 hover:text-red-400 disabled:opacity-40"
+    >
+      <LogOut className="h-3.5 w-3.5" />
+      {signingOut ? "Saliendo…" : "Cerrar sesión"}
+    </button>
+  );
+
+  // El login vive en /admin/login pero no debe heredar el sidebar
+  if (pathname === "/admin/login") return <>{children}</>;
 
   const nav = (
     <nav className="flex flex-col gap-1">
@@ -45,8 +77,13 @@ export default function AdminLayout({
 
   const brand = (
     <Link href="/admin" className="flex items-center gap-3">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-edge bg-surface-2">
-        <Scissors className="h-4 w-4 text-primary" />
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-edge bg-surface-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo.jpeg"
+          alt="Yoan BarberShop"
+          style={{ width: 40, height: 40, objectFit: "contain" }}
+        />
       </span>
       <span className="font-semibold tracking-tight">Yoan BarberShop</span>
     </Link>
@@ -58,12 +95,15 @@ export default function AdminLayout({
       <aside className="fixed inset-y-0 left-0 hidden w-[220px] flex-col border-r border-edge bg-surface p-5 md:flex lg:w-[240px]">
         <div className="mb-8">{brand}</div>
         {nav}
-        <Link
-          href="/"
-          className="mt-auto rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary"
-        >
-          Ver página del cliente
-        </Link>
+        <div className="mt-auto space-y-2">
+          <Link
+            href="/"
+            className="block rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary"
+          >
+            Ver página del cliente
+          </Link>
+          {signOutButton}
+        </div>
       </aside>
 
       {/* Barra superior — móvil */}
@@ -110,13 +150,16 @@ export default function AdminLayout({
             </button>
           </div>
           {nav}
-          <Link
-            href="/"
-            onClick={() => setOpen(false)}
-            className="mt-6 block rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary"
-          >
-            Ver página del cliente
-          </Link>
+          <div className="mt-6 space-y-2">
+            <Link
+              href="/"
+              onClick={() => setOpen(false)}
+              className="block rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary"
+            >
+              Ver página del cliente
+            </Link>
+            {signOutButton}
+          </div>
         </div>
       </div>
 

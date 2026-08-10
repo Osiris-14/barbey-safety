@@ -10,7 +10,6 @@ import {
   Clock,
   Loader2,
   Phone,
-  Scissors,
   User,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -403,8 +402,13 @@ export default function BookingPage() {
     <main className="flex min-h-screen items-center justify-center bg-night px-4 py-8 sm:py-10">
       <div className="w-full max-w-[420px]">
         <header className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-edge bg-surface">
-            <Scissors className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-edge bg-surface">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.jpeg"
+              alt="Yoan BarberShop"
+              style={{ width: 40, height: 40, objectFit: "contain" }}
+            />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
             Yoan BarberShop
