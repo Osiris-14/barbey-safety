@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --base: #111111;
+  --primary: #c9a84c;
+  --content: #f0f0f0;
+  --surface: #1c1c1c;
+  --surface-2: #252525;
+  --edge: #2e2e2e;
+}
+
+html,
+body {
+  background-color: var(--base);
+  color: var(--content);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Inputs nativos en tema oscuro (incluye el icono del date picker) */
+input[type="date"],
+input[type="time"],
+select {
+  color-scheme: dark;
+}
+
+::selection {
+  background-color: rgba(201, 168, 76, 0.35);
+}
+
+/* Scrollbar discreta acorde al tema */
+* {
+  scrollbar-color: var(--edge) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--edge);
+  border-radius: 9999px;
+}
