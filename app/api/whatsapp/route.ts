@@ -1,36 +1,36 @@
-import { NextResponse } from "next/server";
+import { sendWhatsApp, wasSent } from "@/lib/whatsapp";
 
-type WhatsappPayload = {
-  phone?: string;
-  message?: string;
-};
-
-export async function POST(request: Request) {
-  let body: WhatsappPayload;
+export async function POST(req: Request) {
+  let phone: string | undefined;
+  let message: string | undefined;
 
   try {
-    body = await request.json();
+    ({ phone, message } = await req.json());
   } catch {
-    return NextResponse.json({ ok: false, error: "JSON inválido" }, { status: 400 });
+    return Response.json({ ok: false, error: "JSON inválido" }, { status: 400 });
   }
 
-  const { phone, message } = body;
-
   if (!phone || !message) {
-    return NextResponse.json(
+    return Response.json(
       { ok: false, error: "Faltan 'phone' o 'message'" },
       { status: 400 }
     );
   }
 
-  console.log("[whatsapp] →", phone, "|", message);
+  try {
+    const result = await sendWhatsApp(phone, message);
 
-  // TODO: conectar UltraMsg
-  // await fetch(`https://api.ultramsg.com/${INSTANCE_ID}/messages/chat`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   body: JSON.stringify({ token: ULTRAMSG_TOKEN, to: phone, body: message }),
-  // });
+    if (!wasSent(result)) {
+      console.error("[whatsapp] UltraMsg rechazó el envío:", result);
+      return Response.json({ ok: false, result }, { status: 502 });
+    }
 
-  return NextResponse.json({ ok: true });
+    return Response.json({ ok: true, result });
+  } catch (err) {
+    console.error("[whatsapp] error llamando a UltraMsg:", err);
+    return Response.json(
+      { ok: false, error: String(err) },
+      { status: 500 }
+    );
+  }
 }

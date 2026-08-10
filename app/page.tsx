@@ -266,6 +266,8 @@ export default function BookingPage() {
     };
 
     // Aquí sí avisamos: callar un fallo le haría creer que quedó agendado.
+    let appointmentId: string | null = null;
+
     try {
       console.log("[cita] INSERT appointments:", payload);
 
@@ -276,6 +278,7 @@ export default function BookingPage() {
 
       if (insertError) throw insertError;
 
+      appointmentId = data?.[0]?.id ?? null;
       console.log("[cita] guardada:", data);
     } catch (err) {
       console.error("[cita] falló el INSERT en appointments:", err, {
@@ -286,17 +289,40 @@ export default function BookingPage() {
       return;
     }
 
-    // Notificación por WhatsApp (aún inactiva)
-    fetch("/api/whatsapp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        phone: fullPhone,
-        message: `Hola ${name.trim()}, tu cita en Yoan BarberShop quedó agendada para el ${formatLongDate(
-          selectedDate
-        )} a las ${formatTime(selectedTime)}.`,
-      }),
-    }).catch(() => {});
+    // Confirmación por WhatsApp. La cita ya está guardada, así que un fallo
+    // aquí no debe bloquear la pantalla de éxito: solo queda sin confirmar.
+    try {
+      const res = await fetch("/api/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: fullPhone,
+          message: `✂️ Hola ${name.trim()}, tu cita en *Yoan BarberShop* está confirmada para el *${formatLongDate(
+            selectedDate
+          )}* a las *${formatTime(selectedTime)}*. ¡Te esperamos!`,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json?.ok) {
+        console.error("[whatsapp] no se envió la confirmación:", json);
+      } else if (appointmentId) {
+        const { error: flagError } = await supabase
+          .from("appointments")
+          .update({ confirmation_sent: true })
+          .eq("id", appointmentId);
+
+        if (flagError) {
+          console.error(
+            "[whatsapp] no se pudo marcar confirmation_sent:",
+            flagError
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[whatsapp] error enviando la confirmación:", err);
+    }
 
     setDone({
       name: name.trim(),
