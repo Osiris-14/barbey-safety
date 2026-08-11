@@ -44,6 +44,45 @@ export const MONTH_NAMES = [
 /** Lunes → Domingo, para el encabezado del calendario */
 export const WEEKDAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
+/** República Dominicana: UTC-4 todo el año, sin horario de verano */
+export const RD_OFFSET_MS = 4 * 60 * 60 * 1000;
+
+/**
+ * "Ahora" en hora dominicana, como instante desplazado: sobre el Date que
+ * devuelve hay que usar los getters UTC para leer la hora de pared de RD.
+ * Es la referencia única para recordatorios y para ocultar horas pasadas.
+ */
+export function rdNow(): Date {
+  return new Date(Date.now() - RD_OFFSET_MS);
+}
+
+/** YYYY-MM-DD de un instante ya desplazado a RD */
+export function rdDateKey(shifted: Date): string {
+  const y = shifted.getUTCFullYear();
+  const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** HH:MM de un instante ya desplazado a RD */
+export function rdTimeKey(shifted: Date): string {
+  const h = String(shifted.getUTCHours()).padStart(2, "0");
+  const m = String(shifted.getUTCMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+/**
+ * Minutos que faltan para una cita, en hora RD.
+ * Negativo si la cita ya pasó.
+ */
+export function minutesUntil(dateKey: string, time: string): number {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const [hh, mm] = normalizeTime(time).split(":").map(Number);
+  // Ambos lados quedan codificados como "hora de pared RD sobre UTC"
+  const appointmentMs = Date.UTC(y, m - 1, d, hh, mm);
+  return (appointmentMs - rdNow().getTime()) / 60000;
+}
+
 /**
  * Fecha local en formato YYYY-MM-DD.
  * Evitamos toISOString() porque convierte a UTC y puede correr el día.

@@ -20,7 +20,11 @@ import {
   buildMonthGrid,
   formatLongDate,
   formatTime,
+  minutesUntil,
   normalizeTime,
+  rdDateKey,
+  rdNow,
+  rdTimeKey,
   toDateKey,
 } from "@/lib/schedule";
 
@@ -59,6 +63,13 @@ export default function BookingPage() {
 
   const [booked, setBooked] = useState<SlotMap>({});
   const [blocked, setBlocked] = useState<SlotMap>({});
+  /**
+   * Reloj de RD. Arranca en null y se llena en el cliente: si se calculara
+   * durante el render, el HTML del servidor y el del navegador no coincidirían.
+   */
+  const [nowRd, setNowRd] = useState<{ date: string; time: string } | null>(
+    null
+  );
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [loadingDay, setLoadingDay] = useState(false);
 
@@ -140,6 +151,17 @@ export default function BookingPage() {
     loadMonth();
   }, [loadMonth]);
 
+  // Se refresca cada minuto para que un turno deje de ofrecerse al pasar su hora
+  useEffect(() => {
+    const tick = () => {
+      const now = rdNow();
+      setNowRd({ date: rdDateKey(now), time: rdTimeKey(now) });
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   /**
    * Refresca un solo día justo antes de mostrar los horarios.
    * Mismo criterio que loadMonth: si falla, el día se muestra libre.
@@ -189,18 +211,29 @@ export default function BookingPage() {
     [booked, blocked]
   );
 
+  /** Un turno de hoy cuya hora ya pasó deja de ofrecerse */
+  const hasPassed = useCallback(
+    (dateKey: string, slot: string) =>
+      nowRd !== null && dateKey === nowRd.date && slot <= nowRd.time,
+    [nowRd]
+  );
+
   /**
    * No hay días cerrados por regla fija: los bloqueos salen únicamente de
-   * blocked_slots. Solo se descartan las fechas ya pasadas y los días cuyos
-   * turnos están todos ocupados o bloqueados.
+   * blocked_slots. Se descartan las fechas pasadas y los días cuyos turnos
+   * están todos ocupados, bloqueados o ya vencidos.
    */
   const isDayDisabled = useCallback(
     (date: Date) => {
       const key = toDateKey(date);
       if (key < todayKey) return true; // pasado
-      return takenOn(key).size >= TIME_SLOTS.length; // día completo
+      const taken = takenOn(key);
+      const usable = TIME_SLOTS.filter(
+        (slot) => !taken.has(slot) && !hasPassed(key, slot)
+      );
+      return usable.length === 0; // día sin turnos disponibles
     },
-    [todayKey, takenOn]
+    [todayKey, takenOn, hasPassed]
   );
 
   const canGoPrev = cursor > new Date(today.getFullYear(), today.getMonth(), 1);
@@ -323,6 +356,43 @@ export default function BookingPage() {
       console.error("[whatsapp] error enviando la confirmación:", err);
     }
 
+    // Si la cita es en menos de 15 minutos, el cron ya no alcanza a avisar:
+    // mandamos el recordatorio aquí mismo y la marcamos para que no lo repita.
+    if (minutesUntil(selectedDate, selectedTime) < 15) {
+      try {
+        const res = await fetch("/api/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: fullPhone,
+            message: `⏰ Hola ${name.trim()}, tu cita en *Yoan BarberShop* es en 15 minutos a las *${formatTime(
+              selectedTime
+            )}*. ¡Te esperamos!`,
+          }),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok || !json?.ok) {
+          console.error("[whatsapp] no se envió el recordatorio:", json);
+        } else if (appointmentId) {
+          const { error: flagError } = await supabase
+            .from("appointments")
+            .update({ reminder_sent: true })
+            .eq("id", appointmentId);
+
+          if (flagError) {
+            console.error(
+              "[whatsapp] no se pudo marcar reminder_sent:",
+              flagError
+            );
+          }
+        }
+      } catch (err) {
+        console.error("[whatsapp] error enviando el recordatorio:", err);
+      }
+    }
+
     setDone({
       name: name.trim(),
       phone: fullPhone,
@@ -393,10 +463,20 @@ export default function BookingPage() {
 
   /* -------------------------------- Stepper -------------------------------- */
 
-  const takenToday = selectedDate ? takenOn(selectedDate) : new Set<string>();
   const blockedToday = new Set(selectedDate ? blocked[selectedDate] ?? [] : []);
   const bookedToday = new Set(selectedDate ? booked[selectedDate] ?? [] : []);
   const visibleSlots = TIME_SLOTS.filter((t) => !blockedToday.has(t));
+
+  // Un turno solo se puede elegir si no tiene cita y su hora no ha pasado
+  const slotState = (slot: string) => {
+    const taken = bookedToday.has(slot);
+    const passed = selectedDate ? hasPassed(selectedDate, slot) : false;
+    return { taken, passed, disabled: taken || passed };
+  };
+
+  const anyDisabled = visibleSlots.some((slot) => slotState(slot).disabled);
+  const allDisabled =
+    visibleSlots.length > 0 && visibleSlots.every((s) => slotState(s).disabled);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-night px-4 py-8 sm:py-10">
@@ -554,23 +634,23 @@ export default function BookingPage() {
                 <div className="flex h-40 items-center justify-center text-content/40">
                   <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
-              ) : visibleSlots.length === 0 ? (
+              ) : visibleSlots.length === 0 || allDisabled ? (
                 <p className="py-10 text-center text-sm text-content/50">
-                  No hay horarios disponibles este día.
+                  No quedan horarios disponibles este día.
                 </p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {visibleSlots.map((slot) => {
-                    const taken = bookedToday.has(slot);
+                    const { disabled } = slotState(slot);
                     return (
                       <button
                         key={slot}
                         type="button"
-                        disabled={taken}
+                        disabled={disabled}
                         onClick={() => handlePickTime(slot)}
                         className={[
                           "min-h-[44px] rounded-lg border px-1 text-sm transition",
-                          taken
+                          disabled
                             ? "cursor-not-allowed border-edge/60 text-content/25 line-through"
                             : "border-edge bg-surface-2 hover:border-primary hover:text-primary",
                         ].join(" ")}
@@ -582,9 +662,9 @@ export default function BookingPage() {
                 </div>
               )}
 
-              {!loadingDay && takenToday.size > 0 && (
+              {!loadingDay && !allDisabled && anyDisabled && (
                 <p className="mt-4 text-xs text-content/40">
-                  Los horarios tachados ya están reservados.
+                  Los horarios tachados ya están reservados o su hora pasó.
                 </p>
               )}
 

@@ -1,28 +1,15 @@
 import { supabase, type Appointment } from "@/lib/supabase";
-import { formatTime } from "@/lib/schedule";
+import { formatTime, rdDateKey, rdNow, rdTimeKey } from "@/lib/schedule";
 import { sendWhatsApp, wasSent } from "@/lib/whatsapp";
 
 // El cron debe ejecutar la lógica siempre, nunca servir una respuesta cacheada.
 export const dynamic = "force-dynamic";
 
-/** República Dominicana: UTC-4 todo el año, sin horario de verano */
-const RD_OFFSET_MS = 4 * 60 * 60 * 1000;
-
-const pad = (n: number) => String(n).padStart(2, "0");
-
-/** Instante desplazado a hora RD; se lee con los getters UTC */
-function toRdClock(date: Date): Date {
-  return new Date(date.getTime() - RD_OFFSET_MS);
-}
-
-const dateKey = (d: Date) =>
-  `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
-
-const timeKey = (d: Date) =>
-  `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:00`;
+/** Las columnas `time` de Postgres se comparan como HH:MM:SS */
+const timeKey = (d: Date) => `${rdTimeKey(d)}:00`;
 
 export async function GET() {
-  const nowRd = toRdClock(new Date());
+  const nowRd = rdNow();
 
   // Objetivo: citas que empiezan en exactamente 15 minutos.
   // Se busca entre +14 y +16 para dar 2 minutos de holgura, por si el cron
@@ -33,7 +20,7 @@ export async function GET() {
 
   // La fecha sale de `from`, no de `nowRd`: si la ventana cruza medianoche,
   // buscamos en el día al que pertenecen las citas.
-  const today = dateKey(from);
+  const today = rdDateKey(from);
   const fromTime = timeKey(from);
   const toTime = timeKey(to);
 
@@ -96,9 +83,44 @@ export async function GET() {
     }
   }
 
+  // Citas de hoy que ya quedaron por debajo de la ventana: empiezan en menos
+  // de 15 minutos o ya pasaron. Se marcan como avisadas sin enviar nada, para
+  // que el cron no las vuelva a evaluar en cada corrida.
+  let skipped = 0;
+
+  const { data: expired, error: expiredError } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("reminder_sent", false)
+    .eq("status", "pending")
+    .eq("appointment_date", rdDateKey(nowRd))
+    .lt("appointment_time", fromTime);
+
+  if (expiredError) {
+    console.error(
+      "[recordatorios] no se pudieron leer las citas vencidas:",
+      expiredError
+    );
+  } else if (expired && expired.length > 0) {
+    const ids = expired.map((row) => row.id as string);
+    const { error: markError } = await supabase
+      .from("appointments")
+      .update({ reminder_sent: true })
+      .in("id", ids);
+
+    if (markError) {
+      console.error(
+        "[recordatorios] no se pudieron marcar las citas vencidas:",
+        markError
+      );
+    } else {
+      skipped = ids.length;
+    }
+  }
+
   console.log(
-    `[recordatorios] ventana ${today} ${fromTime}–${toTime} · encontradas ${pending.length} · enviadas ${sent}`
+    `[recordatorios] ventana ${today} ${fromTime}–${toTime} · encontradas ${pending.length} · enviadas ${sent} · vencidas marcadas ${skipped}`
   );
 
-  return Response.json({ sent });
+  return Response.json({ sent, skipped });
 }
