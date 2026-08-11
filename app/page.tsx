@@ -358,7 +358,16 @@ export default function BookingPage() {
 
     // Si la cita es en menos de 15 minutos, el cron ya no alcanza a avisar:
     // mandamos el recordatorio aquí mismo y la marcamos para que no lo repita.
-    if (minutesUntil(selectedDate, selectedTime) < 15) {
+    const faltan = minutesUntil(selectedDate, selectedTime);
+    const necesitaRecordatorioYa = faltan < 15;
+
+    console.log(
+      `[recordatorio] cita ${selectedDate} ${selectedTime} · faltan ${faltan.toFixed(
+        1
+      )} min · envío inmediato: ${necesitaRecordatorioYa ? "SÍ" : "no, lo toma el cron"}`
+    );
+
+    if (necesitaRecordatorioYa) {
       try {
         const res = await fetch("/api/whatsapp", {
           method: "POST",
@@ -374,22 +383,38 @@ export default function BookingPage() {
         const json = await res.json();
 
         if (!res.ok || !json?.ok) {
-          console.error("[whatsapp] no se envió el recordatorio:", json);
-        } else if (appointmentId) {
-          const { error: flagError } = await supabase
+          console.error(
+            `[recordatorio] UltraMsg no lo envió (HTTP ${res.status}):`,
+            json
+          );
+        } else if (!appointmentId) {
+          console.error(
+            "[recordatorio] enviado, pero sin id de cita: no se pudo marcar reminder_sent"
+          );
+        } else {
+          // .select() delata el rechazo silencioso de RLS: si una política
+          // filtra la fila, el UPDATE afecta 0 filas y no devuelve error.
+          const { data: flagged, error: flagError } = await supabase
             .from("appointments")
             .update({ reminder_sent: true })
-            .eq("id", appointmentId);
+            .eq("id", appointmentId)
+            .select();
 
           if (flagError) {
             console.error(
-              "[whatsapp] no se pudo marcar reminder_sent:",
+              "[recordatorio] no se pudo marcar reminder_sent:",
               flagError
             );
+          } else if (!flagged || flagged.length === 0) {
+            console.error(
+              "[recordatorio] enviado, pero reminder_sent no se guardó (0 filas). El cron podría repetirlo."
+            );
+          } else {
+            console.log("[recordatorio] enviado y marcado reminder_sent");
           }
         }
       } catch (err) {
-        console.error("[whatsapp] error enviando el recordatorio:", err);
+        console.error("[recordatorio] error enviándolo:", err);
       }
     }
 
