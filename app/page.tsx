@@ -20,12 +20,15 @@ import {
   buildMonthGrid,
   formatLongDate,
   formatTime,
+  isDayFull,
+  isPastDay,
   minutesUntil,
   normalizeTime,
-  rdDateKey,
+  rdClock,
   rdNow,
-  rdTimeKey,
+  slotHasPassed,
   toDateKey,
+  type RdClock,
 } from "@/lib/schedule";
 
 type SlotMap = Record<string, string[]>; // dateKey → ["09:30", ...]
@@ -53,13 +56,13 @@ function describeError(err: unknown): string {
 const STEPS = ["Fecha", "Hora", "Tus datos"];
 
 export default function BookingPage() {
-  const today = useMemo(() => new Date(), []);
-  const todayKey = useMemo(() => toDateKey(today), [today]);
-
+  // El mes que se abre es el dominicano, no el del reloj del dispositivo:
+  // un cliente en otro huso vería el calendario corrido.
   const [step, setStep] = useState(1);
-  const [cursor, setCursor] = useState(
-    () => new Date(today.getFullYear(), today.getMonth(), 1)
-  );
+  const [cursor, setCursor] = useState(() => {
+    const now = rdNow();
+    return new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  });
 
   const [booked, setBooked] = useState<SlotMap>({});
   const [blocked, setBlocked] = useState<SlotMap>({});
@@ -67,9 +70,7 @@ export default function BookingPage() {
    * Reloj de RD. Arranca en null y se llena en el cliente: si se calculara
    * durante el render, el HTML del servidor y el del navegador no coincidirían.
    */
-  const [nowRd, setNowRd] = useState<{ date: string; time: string } | null>(
-    null
-  );
+  const [nowRd, setNowRd] = useState<RdClock | null>(null);
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [loadingDay, setLoadingDay] = useState(false);
 
@@ -153,10 +154,7 @@ export default function BookingPage() {
 
   // Se refresca cada minuto para que un turno deje de ofrecerse al pasar su hora
   useEffect(() => {
-    const tick = () => {
-      const now = rdNow();
-      setNowRd({ date: rdDateKey(now), time: rdTimeKey(now) });
-    };
+    const tick = () => setNowRd(rdClock());
     tick();
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
@@ -211,32 +209,24 @@ export default function BookingPage() {
     [booked, blocked]
   );
 
-  /** Un turno de hoy cuya hora ya pasó deja de ofrecerse */
-  const hasPassed = useCallback(
-    (dateKey: string, slot: string) =>
-      nowRd !== null && dateKey === nowRd.date && slot <= nowRd.time,
-    [nowRd]
-  );
-
   /**
    * No hay días cerrados por regla fija: los bloqueos salen únicamente de
-   * blocked_slots. Se descartan las fechas pasadas y los días cuyos turnos
-   * están todos ocupados, bloqueados o ya vencidos.
+   * blocked_slots. Se descartan las fechas pasadas y los días sin ningún
+   * turno futuro libre. La regla vive en lib/schedule.ts.
    */
   const isDayDisabled = useCallback(
     (date: Date) => {
       const key = toDateKey(date);
-      if (key < todayKey) return true; // pasado
-      const taken = takenOn(key);
-      const usable = TIME_SLOTS.filter(
-        (slot) => !taken.has(slot) && !hasPassed(key, slot)
-      );
-      return usable.length === 0; // día sin turnos disponibles
+      if (isPastDay(key, nowRd)) return true;
+      return isDayFull(key, takenOn(key), nowRd);
     },
-    [todayKey, takenOn, hasPassed]
+    [nowRd, takenOn]
   );
 
-  const canGoPrev = cursor > new Date(today.getFullYear(), today.getMonth(), 1);
+  const canGoPrev = useMemo(() => {
+    const now = rdNow();
+    return cursor > new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  }, [cursor]);
 
   const handlePickDate = async (date: Date) => {
     const key = toDateKey(date);
@@ -504,7 +494,9 @@ export default function BookingPage() {
   // Un turno solo se puede elegir si no tiene cita y su hora no ha pasado
   const slotState = (slot: string) => {
     const taken = bookedToday.has(slot);
-    const passed = selectedDate ? hasPassed(selectedDate, slot) : false;
+    const passed = selectedDate
+      ? slotHasPassed(selectedDate, slot, nowRd)
+      : false;
     return { taken, passed, disabled: taken || passed };
   };
 
@@ -629,7 +621,7 @@ export default function BookingPage() {
                     if (!date) return <span key={`empty-${i}`} />;
                     const key = toDateKey(date);
                     const disabled = isDayDisabled(date);
-                    const isToday = key === todayKey;
+                    const isToday = key === nowRd?.date;
                     return (
                       <button
                         key={key}

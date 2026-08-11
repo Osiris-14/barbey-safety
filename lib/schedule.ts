@@ -71,6 +71,60 @@ export function rdTimeKey(shifted: Date): string {
   return `${h}:${m}`;
 }
 
+/** Hora de pared dominicana, ya formateada */
+export type RdClock = { date: string; time: string };
+
+export function rdClock(): RdClock {
+  const now = rdNow();
+  return { date: rdDateKey(now), time: rdTimeKey(now) };
+}
+
+/**
+ * ¿Ese turno ya pasó? Solo puede pasar en el día en curso, y siempre en
+ * hora dominicana: usar la hora local del dispositivo daría un resultado
+ * distinto según dónde esté el cliente.
+ */
+export function slotHasPassed(
+  dateKey: string,
+  slot: string,
+  now: RdClock | null
+): boolean {
+  if (now === null || dateKey !== now.date) return false;
+  return normalizeTime(slot) <= now.time;
+}
+
+/** La fecha quedó atrás — comparada contra el día dominicano, no el local */
+export function isPastDay(dateKey: string, now: RdClock | null): boolean {
+  return now !== null && dateKey < now.date;
+}
+
+/**
+ * Turnos que todavía se pueden reservar ese día: ni ocupados ni vencidos.
+ * `taken` es la unión de citas y bloqueos.
+ */
+export function availableSlots(
+  dateKey: string,
+  taken: Set<string>,
+  now: RdClock | null
+): string[] {
+  return TIME_SLOTS.filter(
+    (slot) => !taken.has(slot) && !slotHasPassed(dateKey, slot, now)
+  );
+}
+
+/**
+ * Un día está completo cuando no le queda ningún turno futuro libre.
+ * Los turnos que ya pasaron no cuentan: si a las 22:00 quedan libres las
+ * 23:00 y las 23:45, el día sigue abierto aunque la mañana esté llena.
+ */
+export function isDayFull(
+  dateKey: string,
+  taken: Set<string>,
+  now: RdClock | null
+): boolean {
+  return availableSlots(dateKey, taken, now).length === 0;
+}
+
 /**
  * Minutos que faltan para una cita, en hora RD.
  * Negativo si la cita ya pasó.
