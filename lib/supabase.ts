@@ -15,8 +15,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+/**
+ * Esquema de Postgres del que lee la app. Por defecto `public`.
+ *
+ * Sirve para alojar varios barberos en el mismo proyecto de Supabase, cada
+ * uno en su esquema (ver scripts/nuevo-cliente.sql). Dos requisitos:
+ * el esquema debe estar en Settings → API → Exposed schemas, y necesita
+ * GRANT USAGE para anon y authenticated — en un esquema nuevo no hay
+ * permisos por defecto, a diferencia de `public`.
+ */
+export const SUPABASE_SCHEMA =
+  (process.env.NEXT_PUBLIC_SUPABASE_SCHEMA ?? "").trim() || "public";
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: false },
+  db: { schema: SUPABASE_SCHEMA },
 });
 
 export type AppointmentStatus = "pending" | "confirmed" | "no_show";

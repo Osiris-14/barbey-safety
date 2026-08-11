@@ -13,4 +13,10 @@ const rawUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
 const supabaseUrl = rawUrl.replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
 const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
 
-export const supabaseAuth = createBrowserClient(supabaseUrl, supabaseAnonKey);
+/** Mismo esquema que el cliente de datos — ver SUPABASE_SCHEMA */
+const schema =
+  (process.env.NEXT_PUBLIC_SUPABASE_SCHEMA ?? "").trim() || "public";
+
+export const supabaseAuth = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+  db: { schema },
+});
