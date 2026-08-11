@@ -7,7 +7,6 @@ import type { Appointment, AppointmentStatus } from "@/lib/supabase";
 // leerlo como `supabase` hace pensar que es el cliente anónimo.
 import { supabaseAuth } from "@/lib/supabase-auth";
 import { formatShortDate, formatTime } from "@/lib/schedule";
-import { StatusBadge } from "@/components/StatusBadge";
 
 type StatusFilter = "all" | AppointmentStatus;
 
@@ -18,9 +17,23 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "no_show", label: "No asistió" },
 ];
 
+/** Estados editables, sin la opción "todos" del filtro */
+const EDITABLE_STATUSES: { value: AppointmentStatus; label: string }[] = [
+  { value: "pending", label: "Pendiente" },
+  { value: "confirmed", label: "Asistió" },
+  { value: "no_show", label: "No asistió" },
+];
+
+const SELECT_STYLES: Record<AppointmentStatus, string> = {
+  pending: "border-edge bg-surface-2 text-content/70",
+  confirmed: "border-[#4CAF50]/50 bg-[#4CAF50]/10 text-[#4CAF50]",
+  no_show: "border-[#EF5350]/50 bg-[#EF5350]/10 text-[#EF5350]",
+};
+
 export default function AllAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [dateFilter, setDateFilter] = useState("");
@@ -53,7 +66,68 @@ export default function AllAppointmentsPage() {
     load();
   }, [load]);
 
+  /**
+   * Corrige el estado de una cita ya pasada. Mismo criterio que /admin:
+   * se pinta al instante y se revierte si la base lo rechaza.
+   */
+  const setStatus = async (id: string, status: AppointmentStatus) => {
+    const previous = appointments;
+
+    setUpdating(id);
+    setError(null);
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
+    );
+
+    // .select() delata el rechazo silencioso: si una política de RLS filtra
+    // la fila, el UPDATE afecta 0 filas y Postgres no devuelve error.
+    const { data, error } = await supabaseAuth
+      .from("appointments")
+      .update({ status })
+      .eq("id", id)
+      .select();
+
+    if (error) {
+      console.error("[citas] no se pudo cambiar el estado:", error, {
+        id,
+        status,
+      });
+      setAppointments(previous);
+      setError(
+        `No pudimos cambiar el estado. ${error.message}${
+          error.code ? ` (${error.code})` : ""
+        }`
+      );
+    } else if (!data || data.length === 0) {
+      console.error("[citas] el UPDATE no afectó ninguna fila:", { id, status });
+      setAppointments(previous);
+      setError(
+        "El cambio no se guardó: la base rechazó la fila. Cierra sesión y vuelve a entrar."
+      );
+    }
+
+    setUpdating(null);
+  };
+
   const hasFilters = dateFilter !== "" || statusFilter !== "all";
+
+  const statusSelect = (a: Appointment) => (
+    <select
+      value={a.status}
+      onChange={(e) => setStatus(a.id, e.target.value as AppointmentStatus)}
+      disabled={updating === a.id}
+      aria-label={`Estado de la cita de ${a.client_name}`}
+      className={`min-h-[36px] cursor-pointer rounded-full border px-3 text-xs font-medium outline-none transition focus:border-primary disabled:opacity-50 ${
+        SELECT_STYLES[a.status] ?? SELECT_STYLES.pending
+      }`}
+    >
+      {EDITABLE_STATUSES.map((o) => (
+        <option key={o.value} value={o.value} className="bg-surface text-content">
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -123,7 +197,7 @@ export default function AllAppointmentsPage() {
                     {a.client_phone}
                   </p>
                 </div>
-                <StatusBadge status={a.status} />
+                {statusSelect(a)}
               </div>
               <div className="mt-3 flex items-center gap-2 border-t border-edge/60 pt-3 text-sm">
                 <span className="text-content/60">
@@ -181,7 +255,7 @@ export default function AllAppointmentsPage() {
                     {a.client_phone}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={a.status} />
+                    {statusSelect(a)}
                   </td>
                 </tr>
               ))
