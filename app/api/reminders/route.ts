@@ -37,11 +37,15 @@ export async function GET(request: Request) {
   const fromTime = timeKey(from);
   const toTime = timeKey(to);
 
+  // Se avisa a toda cita viva, no solo a las `pending`. El barbero a veces
+  // marca "Asistió" antes de que el cliente llegue, y con `status = pending`
+  // esa cita quedaba fuera de la consulta y se perdía el recordatorio.
+  // Solo se excluye a quien ya se dio por ausente.
   const { data, error } = await supabase
     .from("appointments")
     .select("*")
     .eq("reminder_sent", false)
-    .eq("status", "pending")
+    .neq("status", "no_show")
     .eq("appointment_date", today)
     .gte("appointment_time", fromTime)
     .lte("appointment_time", toTime);
@@ -105,7 +109,7 @@ export async function GET(request: Request) {
     .from("appointments")
     .select("id")
     .eq("reminder_sent", false)
-    .eq("status", "pending")
+    .neq("status", "no_show")
     .eq("appointment_date", rdDateKey(nowRd))
     .lt("appointment_time", fromTime);
 
