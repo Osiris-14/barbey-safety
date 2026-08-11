@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
-import { supabase, type Appointment, type AppointmentStatus } from "@/lib/supabase";
+import type { Appointment, AppointmentStatus } from "@/lib/supabase";
+// Con sesión: bajo RLS el panel actúa como `authenticated`, no como `anon`
+import { supabaseAuth as supabase } from "@/lib/supabase-auth";
 import { formatShortDate, formatTime } from "@/lib/schedule";
 import { StatusBadge } from "@/components/StatusBadge";
 

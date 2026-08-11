@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Loader2, Phone, RefreshCw, X } from "lucide-react";
-import {
-  supabase,
-  type Appointment,
-  type AppointmentStatus,
-} from "@/lib/supabase";
+import type { Appointment, AppointmentStatus } from "@/lib/supabase";
+// Con sesión: bajo RLS el panel actúa como `authenticated`, no como `anon`
+import { supabaseAuth as supabase } from "@/lib/supabase-auth";
 import { formatLongDate, formatTime, toDateKey } from "@/lib/schedule";
 
 const POLL_MS = 30_000;

@@ -8,7 +8,20 @@ export const dynamic = "force-dynamic";
 /** Las columnas `time` de Postgres se comparan como HH:MM:SS */
 const timeKey = (d: Date) => `${rdTimeKey(d)}:00`;
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Solo el cron entra. Si CRON_SECRET no está configurado cerramos el paso:
+  // es preferible que los recordatorios se detengan a dejar la ruta abierta.
+  const secret = process.env.CRON_SECRET;
+
+  if (!secret) {
+    console.error("[recordatorios] falta CRON_SECRET en el entorno");
+    return Response.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+    return Response.json({ error: "No autorizado" }, { status: 401 });
+  }
+
   const nowRd = rdNow();
 
   // Objetivo: citas que empiezan en exactamente 15 minutos.

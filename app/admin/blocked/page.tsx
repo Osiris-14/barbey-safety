@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Ban, Loader2, Trash2 } from "lucide-react";
-import { supabase, type BlockedSlot } from "@/lib/supabase";
+import type { BlockedSlot } from "@/lib/supabase";
+// Con sesión: bajo RLS el panel actúa como `authenticated`, no como `anon`
+import { supabaseAuth as supabase } from "@/lib/supabase-auth";
 import {
   TIME_SLOTS,
   formatLongDate,
