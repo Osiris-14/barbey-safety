@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Ban, Loader2, Trash2 } from "lucide-react";
 import type { BlockedSlot } from "@/lib/supabase";
-// Con sesión: bajo RLS el panel actúa como `authenticated`, no como `anon`
-import { supabaseAuth as supabase } from "@/lib/supabase-auth";
+// Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
+// leerlo como `supabase` hace pensar que es el cliente anónimo.
+import { supabaseAuth } from "@/lib/supabase-auth";
 import {
   TIME_SLOTS,
   formatLongDate,
@@ -24,7 +25,7 @@ export default function BlockedSlotsPage() {
   const [time, setTime] = useState<string>(TIME_SLOTS[0]);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAuth
       .from("blocked_slots")
       .select("*")
       .order("slot_date", { ascending: true })
@@ -57,12 +58,13 @@ export default function BlockedSlotsPage() {
 
     setSaving(true);
     setError(null);
-    const { error } = await supabase
+    const { error } = await supabaseAuth
       .from("blocked_slots")
       .insert({ slot_date: date, slot_time: time });
 
     if (error) {
-      setError("No pudimos bloquear el horario.");
+      console.error("[bloqueos] no se pudo insertar:", error);
+      setError(`No pudimos bloquear el horario. ${error.message}`);
     } else {
       await load();
     }
@@ -71,10 +73,11 @@ export default function BlockedSlotsPage() {
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
-    const { error } = await supabase.from("blocked_slots").delete().eq("id", id);
+    const { error } = await supabaseAuth.from("blocked_slots").delete().eq("id", id);
 
     if (error) {
-      setError("No pudimos eliminar el bloqueo.");
+      console.error("[bloqueos] no se pudo eliminar:", error);
+      setError(`No pudimos eliminar el bloqueo. ${error.message}`);
     } else {
       setSlots((prev) => prev.filter((s) => s.id !== id));
     }

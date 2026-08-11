@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/supabase";
-// Con sesión: bajo RLS el panel actúa como `authenticated`, no como `anon`
-import { supabaseAuth as supabase } from "@/lib/supabase-auth";
+// Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
+// leerlo como `supabase` hace pensar que es el cliente anónimo.
+import { supabaseAuth } from "@/lib/supabase-auth";
 import { formatShortDate, formatTime } from "@/lib/schedule";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -28,7 +29,7 @@ export default function AllAppointmentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
 
-    let query = supabase
+    let query = supabaseAuth
       .from("appointments")
       .select("*")
       .order("appointment_date", { ascending: false })

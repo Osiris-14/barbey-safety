@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Loader2, Phone, RefreshCw, X } from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/supabase";
-// Con sesión: bajo RLS el panel actúa como `authenticated`, no como `anon`
-import { supabaseAuth as supabase } from "@/lib/supabase-auth";
+// Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
+// leerlo como `supabase` hace pensar que es el cliente anónimo.
+import { supabaseAuth } from "@/lib/supabase-auth";
 import { formatLongDate, formatTime, toDateKey } from "@/lib/schedule";
 
 const POLL_MS = 30_000;
@@ -40,9 +41,10 @@ export default function AdminTodayPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAuth
       .from("appointments")
       .select("*")
       .eq("appointment_date", todayKey)
@@ -64,6 +66,22 @@ export default function AdminTodayPage() {
     return () => clearInterval(id);
   }, [load]);
 
+  /**
+   * Las lecturas funcionan como `anon` gracias a la política "leer publico",
+   * así que el panel se ve normal aunque no haya sesión — y solo fallan las
+   * escrituras. Este aviso hace visible ese estado antes de tocar un botón.
+   */
+  useEffect(() => {
+    supabaseAuth.auth.getUser().then(({ data }) => {
+      setSignedIn(data.user !== null);
+      if (!data.user) {
+        console.error(
+          "[citas] el navegador no tiene sesión: los cambios de estado serán rechazados por RLS"
+        );
+      }
+    });
+  }, []);
+
   /** Pinta la card al instante y revierte si Supabase rechaza el UPDATE */
   const setStatus = async (id: string, status: AppointmentStatus) => {
     const previous = appointments;
@@ -74,10 +92,13 @@ export default function AdminTodayPage() {
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
 
-    const { error } = await supabase
+    // .select() es lo que delata un rechazo silencioso: si una política de RLS
+    // filtra la fila, el UPDATE afecta 0 filas y Postgres no devuelve error.
+    const { data, error } = await supabaseAuth
       .from("appointments")
       .update({ status })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
 
     if (error) {
       console.error("[citas] no se pudo actualizar el estado:", error, {
@@ -85,8 +106,19 @@ export default function AdminTodayPage() {
         status,
       });
       setAppointments(previous);
-      setError(`No pudimos actualizar el estado. ${error.message}`);
+      setError(
+        `No pudimos actualizar el estado. ${error.message}${
+          error.code ? ` (${error.code})` : ""
+        }`
+      );
+    } else if (!data || data.length === 0) {
+      console.error("[citas] el UPDATE no afectó ninguna fila:", { id, status });
+      setAppointments(previous);
+      setError(
+        "El cambio no se guardó: la base rechazó la fila. Cierra sesión y vuelve a entrar."
+      );
     }
+
     setUpdating(null);
   };
 
@@ -111,6 +143,14 @@ export default function AdminTodayPage() {
           Actualizar
         </button>
       </div>
+
+      {signedIn === false && (
+        <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+          No hay sesión activa en este navegador. Puedes ver las citas, pero
+          confirmar o marcar ausencias será rechazado. Cierra sesión y vuelve a
+          entrar.
+        </p>
+      )}
 
       {/* Siempre 3 columnas, en cualquier tamaño de pantalla */}
       <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-3">

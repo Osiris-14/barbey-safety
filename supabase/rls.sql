@@ -56,8 +56,34 @@ create policy "banderas publicas" on appointments
   with check (true);
 
 -- ═══════════════════════════════════════════════════════════
+-- PARTE 3 — permisos del barbero
+-- ═══════════════════════════════════════════════════════════
+--
+-- Una política NO otorga permisos: Postgres exige las dos cosas, el GRANT
+-- sobre la tabla y una política que deje pasar la fila. Supabase concede
+-- los GRANT por defecto, pero si alguno se revocó, `authenticated` recibe
+-- el mismo error 42501 "permission denied" que veía `anon`, y los botones
+-- del panel dejan de guardar. Esto es idempotente: ejecútalo sin miedo.
+
+grant select, insert, update, delete on appointments to authenticated;
+grant select, insert, update, delete on blocked_slots to authenticated;
+
+-- ═══════════════════════════════════════════════════════════
 -- Comprobación
 -- ═══════════════════════════════════════════════════════════
+--
+-- Permisos por rol (authenticated debe tener UPDATE en appointments;
+-- anon solo debe aparecer con UPDATE en confirmation_sent y reminder_sent):
+--
+-- select grantee, privilege_type, table_name
+--   from information_schema.role_table_grants
+--  where table_name in ('appointments', 'blocked_slots')
+--    and grantee in ('anon', 'authenticated')
+--  order by grantee, table_name, privilege_type;
+--
+-- select grantee, privilege_type, table_name, column_name
+--   from information_schema.column_privileges
+--  where table_name = 'appointments' and grantee = 'anon';
 --
 -- select tablename, policyname, roles, cmd
 --   from pg_policies
