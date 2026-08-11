@@ -29,21 +29,24 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  // getUser() valida el token contra el servidor de auth de Supabase.
+  // getSession() solo decodifica la cookie, así que una cookie fabricada
+  // pasaría el filtro; el costo es una llamada de red por request.
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
 
-  // Sin sesión: todo /admin manda al login (menos el login mismo)
-  if (!session && pathname !== LOGIN_PATH) {
+  // Sin sesión válida: todo /admin manda al login (menos el login mismo)
+  if (!user && pathname !== LOGIN_PATH) {
     const url = request.nextUrl.clone();
     url.pathname = LOGIN_PATH;
     return NextResponse.redirect(url);
   }
 
-  // Con sesión: el login redirige al panel
-  if (session && pathname === LOGIN_PATH) {
+  // Con sesión válida: el login redirige al panel
+  if (user && pathname === LOGIN_PATH) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin";
     return NextResponse.redirect(url);
