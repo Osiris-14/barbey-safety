@@ -368,13 +368,22 @@ export default function BookingPage() {
     );
 
     if (necesitaRecordatorioYa) {
+      // El tiempo real, no un "15 minutos" fijo que sería falso a 2 minutos.
+      // Menos de 1 incluye los negativos, así que una cita ya empezada
+      // tampoco anuncia un futuro que no existe.
+      const restantes = Math.round(faltan);
+      const cuando =
+        faltan < 1
+          ? "es ahora mismo"
+          : `es en ${restantes} ${restantes === 1 ? "minuto" : "minutos"}`;
+
       try {
         const res = await fetch("/api/whatsapp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             phone: fullPhone,
-            message: `⏰ Hola ${name.trim()}, tu cita en *Yoan BarberShop* es en 15 minutos a las *${formatTime(
+            message: `⏰ Hola ${name.trim()}, tu cita en *Yoan BarberShop* ${cuando} a las *${formatTime(
               selectedTime
             )}*. ¡Te esperamos!`,
           }),
