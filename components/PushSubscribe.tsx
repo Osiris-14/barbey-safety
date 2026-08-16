@@ -71,10 +71,12 @@ export default function PushSubscribe() {
       setEnabled(true);
     } catch (err) {
       console.error("[push] no se pudo activar la notificación:", err);
+      const detail =
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       setError(
         err instanceof Error && err.name === "NotAllowedError"
           ? "Permiso denegado: activa las notificaciones desde los ajustes del navegador."
-          : "No se pudieron activar las notificaciones. Revisa la consola."
+          : `No se pudieron activar las notificaciones. ${detail}`
       );
     } finally {
       setBusy(false);
