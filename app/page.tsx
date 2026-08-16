@@ -417,6 +417,32 @@ export default function BookingPage() {
       }
     }
 
+    // Aviso push al barbero. Mismo criterio que la confirmación: la cita ya
+    // está guardada, un fallo aquí no debe bloquear la pantalla de éxito.
+    try {
+      const res = await fetch("/api/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: fullPhone,
+          message: {
+            title: "Nueva cita agendada",
+            body: `${name.trim()} · ${formatLongDate(
+              selectedDate
+            )} a las ${formatTime(selectedTime)}`,
+          },
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json?.ok) {
+        console.error("[push] no se envió la notificación:", json);
+      }
+    } catch (err) {
+      console.error("[push] error notificando al barbero:", err);
+    }
+
     setDone({
       name: name.trim(),
       phone: fullPhone,

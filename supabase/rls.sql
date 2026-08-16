@@ -11,6 +11,7 @@
 
 alter table appointments enable row level security;
 alter table blocked_slots enable row level security;
+alter table push_subscriptions enable row level security;
 
 -- El barbero autenticado puede todo
 create policy "auth solo" on appointments
@@ -31,6 +32,16 @@ create policy "leer publico" on appointments
 
 -- El cliente necesita leer los horarios bloqueados
 create policy "leer publico" on blocked_slots
+  for select to anon using (true);
+
+-- El barbero registra sus suscripciones push desde el panel (authenticated).
+-- anon solo las lee: /api/push/notify corre con la anon key en el servidor
+-- y necesita ver a quién notificar cuando alguien agenda.
+create policy "auth solo" on push_subscriptions
+  for all to authenticated using (true)
+  with check (true);
+
+create policy "leer publico" on push_subscriptions
   for select to anon using (true);
 
 -- ═══════════════════════════════════════════════════════════
@@ -67,6 +78,10 @@ create policy "banderas publicas" on appointments
 
 grant select, insert, update, delete on appointments to authenticated;
 grant select, insert, update, delete on blocked_slots to authenticated;
+grant select, insert, update, delete on push_subscriptions to authenticated;
+
+-- anon lee push_subscriptions (lo necesita /api/push/notify)
+grant select on push_subscriptions to anon;
 
 -- ═══════════════════════════════════════════════════════════
 -- Comprobación

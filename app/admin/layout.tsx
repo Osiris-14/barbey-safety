@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
+import PushSubscribe from "@/components/PushSubscribe";
 
 const NAV = [
   { href: "/admin", label: "Inicio", icon: CalendarCheck },
@@ -96,6 +97,7 @@ export default function AdminLayout({
         <div className="mb-8">{brand}</div>
         {nav}
         <div className="mt-auto space-y-2">
+          <PushSubscribe />
           <Link
             href="/"
             className="block rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary"
@@ -151,6 +153,7 @@ export default function AdminLayout({
           </div>
           {nav}
           <div className="mt-6 space-y-2">
+            <PushSubscribe />
             <Link
               href="/"
               onClick={() => setOpen(false)}

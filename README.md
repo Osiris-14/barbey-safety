@@ -17,6 +17,7 @@ confirmaciones y los recordatorios salen por WhatsApp automáticamente.
 | Base de datos | Supabase (Postgres + RLS) |
 | Autenticación | Supabase Auth, sesión en cookies vía `@supabase/ssr` |
 | WhatsApp | UltraMsg |
+| Notificaciones push | Web Push (VAPID) |
 | Cron | cron-job.org, cada minuto |
 | Hosting | Vercel |
 
@@ -44,6 +45,7 @@ Para un cliente nuevo en un esquema aparte, usa
 | `/admin/login` | Entrada del barbero | público |
 | `/api/whatsapp` | Envía un mensaje | exige cita reciente |
 | `/api/reminders` | Recordatorios de dentro de 15 min | exige `CRON_SECRET` |
+| `/api/push/notify` | Aviso push al barbero al agendar | exige cita reciente |
 
 ## Estructura
 
@@ -52,10 +54,11 @@ lib/supabase.ts        cliente de datos + tipos
 lib/supabase-auth.ts   cliente con sesión en cookies (panel y login)
 lib/schedule.ts        turnos, hora dominicana, disponibilidad
 lib/whatsapp.ts        cliente de UltraMsg (solo servidor)
+lib/push.ts            envío de notificaciones push (VAPID, solo servidor)
 middleware.ts          protege /admin con getUser()
 app/page.tsx           stepper de 3 pasos del cliente
 app/admin/             panel del barbero
-app/api/               envío de WhatsApp y recordatorios
+app/api/               envío de WhatsApp, push y recordatorios
 scripts/               alta de clientes nuevos
 supabase/              esquema y políticas de RLS
 ```
@@ -93,7 +96,18 @@ porque el cron ya no llega a tiempo.
 - `/api/whatsapp` exige una cita con ese teléfono creada hace menos de 2
   minutos; si no, 403. Sin eso sería un relay de spam a costa de tu
   cuenta de UltraMsg.
+- `/api/push/notify` usa la misma protección que `/api/whatsapp`: sin una
+  cita reciente con ese teléfono no se envía ningún push.
 - `/api/reminders` exige `Authorization: Bearer $CRON_SECRET`.
+
+## Notificaciones push
+
+Cuando el barbero pulsa "Activar notificaciones" en el panel, su navegador
+guarda una suscripción en `push_subscriptions` (con RLS: solo él puede
+escribirla). Al agendar una cita, la página llama a `/api/push/notify`,
+que envía un push a todas las suscripciones. No depende de sesión del
+cliente: es un servicio de sistema, funciona aunque el celular esté
+bloqueado.
 
 ## Pendientes conocidos
 

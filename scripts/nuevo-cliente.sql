@@ -45,6 +45,15 @@ create table NOMBRE_CLIENTE.blocked_slots (
   slot_time time not null
 );
 
+-- Suscripciones push del barbero (notificaciones al agendar)
+create table NOMBRE_CLIENTE.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz default now()
+);
+
 create index on NOMBRE_CLIENTE.appointments(appointment_date);
 
 -- Evita dos citas en el mismo día y hora a nivel de base de datos.
@@ -61,6 +70,7 @@ create unique index NOMBRE_CLIENTE_unique_slot
 
 alter table NOMBRE_CLIENTE.appointments enable row level security;
 alter table NOMBRE_CLIENTE.blocked_slots enable row level security;
+alter table NOMBRE_CLIENTE.push_subscriptions enable row level security;
 
 -- El barbero autenticado puede todo
 create policy "auth solo" on NOMBRE_CLIENTE.appointments
@@ -81,6 +91,15 @@ create policy "leer publico" on NOMBRE_CLIENTE.appointments
 
 -- El cliente necesita leer los horarios bloqueados
 create policy "leer publico" on NOMBRE_CLIENTE.blocked_slots
+  for select to anon using (true);
+
+-- El barbero registra sus suscripciones push desde el panel (authenticated).
+-- anon solo las lee: /api/push/notify corre con la anon key en el servidor.
+create policy "auth solo" on NOMBRE_CLIENTE.push_subscriptions
+  for all to authenticated using (true)
+  with check (true);
+
+create policy "leer publico" on NOMBRE_CLIENTE.push_subscriptions
   for select to anon using (true);
 
 -- ─── Parte 2: permisos del cliente anónimo ─────────────────
@@ -108,6 +127,11 @@ grant select, insert, update, delete
   on NOMBRE_CLIENTE.appointments to authenticated;
 grant select, insert, update, delete
   on NOMBRE_CLIENTE.blocked_slots to authenticated;
+grant select, insert, update, delete
+  on NOMBRE_CLIENTE.push_subscriptions to authenticated;
+
+-- anon lee push_subscriptions (lo necesita /api/push/notify)
+grant select on NOMBRE_CLIENTE.push_subscriptions to anon;
 
 -- ═══════════════════════════════════════════════════════════
 -- Comprobación

@@ -48,9 +48,22 @@ NEXT_PUBLIC_SUPABASE_SCHEMA=pedro
 ULTRAMSG_INSTANCE_ID=
 ULTRAMSG_TOKEN=
 CRON_SECRET=
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:pedro@barbershop.do
 ```
 
 Las de UltraMsg salen del paso 5; puedes dejarlas vacías y volver.
+
+Genera las claves VAPID de las notificaciones push:
+
+```bash
+npx web-push generate-vapid-keys --json
+```
+
+Copia `publicKey` a `NEXT_PUBLIC_VAPID_PUBLIC_KEY` y `privateKey` a
+`VAPID_PRIVATE_KEY`. Sin ellas, la app agenda igual pero no llega el aviso
+al barbero.
 
 Genera un `CRON_SECRET` distinto por cliente:
 
@@ -130,6 +143,8 @@ Antes de entregarle la app al cliente:
 - [ ] `/admin` redirige a `/admin/login`
 - [ ] El barbero entra con su usuario y ve el panel
 - [ ] Los botones ✓ y ✗ guardan el estado (recarga y compruébalo)
+- [ ] En el panel, el barbero activa las notificaciones push; luego agenda
+      una cita de prueba y le llega el aviso en la barra de notificaciones
 - [ ] Agenda una cita de prueba con tu número: llega la confirmación
 - [ ] Agenda otra a 20 minutos: el recordatorio llega ~15 min antes
 - [ ] Borra las citas de prueba desde el panel
