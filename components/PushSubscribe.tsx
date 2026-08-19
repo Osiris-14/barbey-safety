@@ -1,19 +1,41 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Bell, BellRing, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bell, BellRing, Download, Loader2 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
 
 /**
  * Botón que activa las notificaciones push del barbero.
  * Pide permiso, registra el service worker y guarda la suscripción en
  * push_subscriptions para que /api/push/notify pueda avisarle al agendar.
+ *
+ * En iPhone (Safari y Chrome usan WebKit) el push solo funciona si la web
+ * está instalada como PWA, es decir, agregada a la pantalla de inicio y
+ * abierta desde su ícono. Si no está en modo standalone se le indica cómo
+ * instalarla antes de pedir el permiso.
  */
 export default function PushSubscribe() {
   const [supported, setSupported] = useState(true);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isIos = useMemo(
+    () =>
+      typeof navigator !== "undefined" &&
+      /iPad|iPhone|iPod/.test(navigator.userAgent),
+    []
+  );
+
+  /** ¿Se abrió desde el ícono instalado (standalone) y no desde Safari? */
+  const isStandalone = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      // @ts-expect-error propiedad legacy de iOS
+      (typeof window.navigator !== "undefined" && window.navigator.standalone)
+    );
+  }, []);
 
   useEffect(() => {
     setSupported("serviceWorker" in navigator && "PushManager" in window);
@@ -88,6 +110,28 @@ export default function PushSubscribe() {
       <p className="text-xs text-content/40">
         Tu navegador no soporta notificaciones.
       </p>
+    );
+  }
+
+  // iPhone: antes de activar hay que instalar la app a la pantalla de inicio
+  if (isIos && !isStandalone) {
+    return (
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300">
+        <p className="mb-1 flex items-center gap-1.5 font-medium">
+          <Download className="h-3.5 w-3.5" />
+          Para recibir notificaciones en tu iPhone:
+        </p>
+        <ol className="list-inside list-decimal space-y-1 text-amber-200/80">
+          <li>
+            Toca <b>Compartir</b>{" "}
+            <span className="text-amber-300">⬆</span> en Safari.
+          </li>
+          <li>Pulsa “Agregar a pantalla de inicio”.</li>
+          <li>
+            Abre la app desde su ícono y vuelve a pulsar este botón.
+          </li>
+        </ol>
+      </div>
     );
   }
 
