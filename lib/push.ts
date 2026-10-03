@@ -50,7 +50,11 @@ export async function sendPush(
     try {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        JSON.stringify({ ...payload, url: payload.url ?? "/admin" })
+        JSON.stringify({ ...payload, url: payload.url ?? "/admin" }),
+        // Apple retrasa o agrupa los "normal" (modo ahorro, pantalla bloqueada);
+        // una cita nueva es aviso inmediato. TTL: si el teléfono está apagado,
+        // vale la pena entregarlo hasta 1 día después, no 4 semanas.
+        { urgency: "high", TTL: 24 * 60 * 60 }
       );
       sent++;
     } catch (err) {

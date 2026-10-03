@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, BellRing, Download, Loader2 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
 
@@ -14,37 +14,62 @@ import { supabaseAuth } from "@/lib/supabase-auth";
  * abierta desde su ícono. Si no está en modo standalone se le indica cómo
  * instalarla antes de pedir el permiso.
  */
+/** Guarda (o refresca) la suscripción en push_subscriptions */
+async function saveSubscription(sub: PushSubscription) {
+  const { endpoint, keys } = sub.toJSON();
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    throw new Error("La suscripción no trae endpoint/keys");
+  }
+
+  const { error } = await supabaseAuth
+    .from("push_subscriptions")
+    .upsert(
+      { endpoint, p256dh: keys.p256dh, auth: keys.auth },
+      { onConflict: "endpoint" }
+    );
+
+  if (error) throw error;
+}
+
 export default function PushSubscribe() {
   const [supported, setSupported] = useState(true);
   const [busy, setBusy] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isIos = useMemo(
-    () =>
-      typeof navigator !== "undefined" &&
-      /iPad|iPhone|iPod/.test(navigator.userAgent),
-    []
-  );
-
-  /** ¿Se abrió desde el ícono instalado (standalone) y no desde Safari? */
-  const isStandalone = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return (
-      window.matchMedia("(display-mode: standalone)").matches ||
-      // @ts-expect-error propiedad legacy de iOS
-      (typeof window.navigator !== "undefined" && window.navigator.standalone)
-    );
-  }, []);
+  // Se calculan en el navegador (useEffect) y no al renderizar: en el
+  // servidor no hay navigator y el HTML no coincidiría con el del cliente.
+  const [isIos, setIsIos] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    setSupported("serviceWorker" in navigator && "PushManager" in window);
+    setIsIos(/iPad|iPhone|iPod/.test(navigator.userAgent));
+    setIsStandalone(
+      window.matchMedia("(display-mode: standalone)").matches ||
+        // @ts-expect-error propiedad legacy de iOS
+        Boolean(window.navigator.standalone)
+    );
 
-    // Si ya está activada, no volver a preguntar cada vez que se entra
-    navigator.serviceWorker?.ready
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setEnabled(Boolean(sub)))
-      .catch(() => {});
+    const ok =
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      "Notification" in window;
+    setSupported(ok);
+    if (!ok) return;
+
+    // Si ya está activada, no volver a preguntar cada vez que se entra.
+    // Además se vuelve a guardar en la base: iOS cambia el endpoint cuando
+    // se reinstala la app o se renuevan los permisos, y si la fila queda
+    // vieja el servidor envía a un endpoint muerto y nunca llega nada.
+    navigator.serviceWorker
+      .getRegistration("/")
+      .then((reg) => reg?.pushManager.getSubscription())
+      .then(async (sub) => {
+        if (!sub || Notification.permission !== "granted") return;
+        await saveSubscription(sub);
+        setEnabled(true);
+      })
+      .catch((err) => console.error("[push] no se pudo sincronizar:", err));
   }, []);
 
   /** La VAPID public key viene en base64url y PushManager la quiere como Uint8Array */
@@ -70,25 +95,25 @@ export default function PushSubscribe() {
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!publicKey) throw new Error("Falta NEXT_PUBLIC_VAPID_PUBLIC_KEY");
 
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      });
-
-      const { endpoint, keys } = sub.toJSON();
-      if (!endpoint || !keys?.p256dh || !keys?.auth) {
-        throw new Error("La suscripción no trae endpoint/keys");
+      // iOS solo muestra el diálogo de permiso si se pide en el mismo toque,
+      // antes de cualquier await que pueda "gastar" el gesto del usuario
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        const denied = new Error("Permiso de notificaciones no concedido");
+        denied.name = "NotAllowedError";
+        throw denied;
       }
 
-      const { error: insertError } = await supabaseAuth
-        .from("push_subscriptions")
-        .upsert(
-          { endpoint, p256dh: keys.p256dh, auth: keys.auth },
-          { onConflict: "endpoint" }
-        );
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+      const sub =
+        (await reg.pushManager.getSubscription()) ??
+        (await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        }));
 
-      if (insertError) throw insertError;
+      await saveSubscription(sub);
 
       setEnabled(true);
     } catch (err) {
@@ -105,15 +130,9 @@ export default function PushSubscribe() {
     }
   };
 
-  if (!supported) {
-    return (
-      <p className="text-xs text-content/40">
-        Tu navegador no soporta notificaciones.
-      </p>
-    );
-  }
-
-  // iPhone: antes de activar hay que instalar la app a la pantalla de inicio
+  // iPhone: antes de activar hay que instalar la app a la pantalla de inicio.
+  // Va antes del chequeo de soporte: en una pestaña de Safari iOS no expone
+  // PushManager, y sin este orden nunca se verían los pasos de instalación.
   if (isIos && !isStandalone) {
     return (
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300">
@@ -132,6 +151,14 @@ export default function PushSubscribe() {
           </li>
         </ol>
       </div>
+    );
+  }
+
+  if (!supported) {
+    return (
+      <p className="text-xs text-content/40">
+        Tu navegador no soporta notificaciones.
+      </p>
     );
   }
 
