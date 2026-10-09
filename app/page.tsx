@@ -103,6 +103,11 @@ export default function BookingPage() {
   } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [savedAppointment, setSavedAppointment] = useState<SavedAppointment | null>(null);
+  const [showLookup, setShowLookup] = useState(false);
+  const [lookupPhone, setLookupPhone] = useState("");
+  const [lookupDate, setLookupDate] = useState("");
+  const [lookupTime, setLookupTime] = useState<string>(TIME_SLOTS[0]);
+  const [lookingUp, setLookingUp] = useState(false);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -482,6 +487,41 @@ export default function BookingPage() {
     }
   };
 
+  const lookupAppointment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!/^\d{10}$/.test(lookupPhone) || !lookupDate || !lookupTime) return;
+
+    setLookingUp(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/cancel/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: `+1${lookupPhone}`,
+          date: lookupDate,
+          time: lookupTime,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No encontramos la cita");
+
+      const appointment = json.appointment;
+      const token = appointment.cancellation_token as string;
+      window.localStorage.setItem(CANCELLATION_TOKEN_KEY, token);
+      const url = new URL(window.location.href);
+      url.searchParams.set(CANCELLATION_QUERY_KEY, token);
+      window.history.replaceState(null, "", url.toString());
+      setSavedAppointment({ ...appointment, cancellationToken: token });
+      setShowLookup(false);
+    } catch (err) {
+      console.error("[cita] no se pudo recuperar:", err);
+      setError(describeError(err));
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
   const resetAll = () => {
     setDone(null);
     setStep(1);
@@ -607,6 +647,56 @@ export default function BookingPage() {
             >
               {cancelling ? "Cancelando…" : "Cancelar cita"}
             </button>
+          </section>
+        )}
+
+        {!savedAppointment && (
+          <section className="mb-6 rounded-2xl border border-edge bg-surface p-4">
+            <button
+              type="button"
+              onClick={() => setShowLookup((open) => !open)}
+              className="w-full text-left text-sm font-medium text-content/70 transition hover:text-primary"
+            >
+              {showLookup ? "Ocultar recuperación" : "¿Ya tienes una cita? Recuperarla"}
+            </button>
+
+            {showLookup && (
+              <form onSubmit={lookupAppointment} className="mt-4 space-y-3">
+                <p className="text-xs text-content/50">
+                  Escribe los mismos datos usados al reservar para ver el botón de cancelación.
+                </p>
+                <input
+                  type="tel"
+                  value={lookupPhone}
+                  onChange={(event) => setLookupPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="WhatsApp: 809 555 0000"
+                  inputMode="numeric"
+                  className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
+                />
+                <input
+                  type="date"
+                  value={lookupDate}
+                  onChange={(event) => setLookupDate(event.target.value)}
+                  className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
+                />
+                <select
+                  value={lookupTime}
+                  onChange={(event) => setLookupTime(event.target.value)}
+                  className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
+                >
+                  {TIME_SLOTS.map((slot) => (
+                    <option key={slot} value={slot}>{formatTime(slot)}</option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={lookingUp || !/^\d{10}$/.test(lookupPhone) || !lookupDate}
+                  className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-night disabled:opacity-40"
+                >
+                  {lookingUp ? "Buscando…" : "Ver mi cita"}
+                </button>
+              </form>
+            )}
           </section>
         )}
 

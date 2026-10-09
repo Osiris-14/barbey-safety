@@ -34,3 +34,9 @@ git add . && git commit -m "fix: conservar cita para cancelarla al volver" && gi
 ```bash
 git add . && git commit -m "fix: conservar cita en el enlace" && git push origin main
 ```
+
+## Publicar la recuperación de citas antiguas
+
+```bash
+git add . && git commit -m "fix: recuperar citas antiguas para cancelarlas" && git push origin main
+```
