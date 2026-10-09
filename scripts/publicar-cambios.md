@@ -28,3 +28,9 @@ Ese comando está prohibido.
 ```bash
 git add . && git commit -m "fix: conservar cita para cancelarla al volver" && git push origin main
 ```
+
+## Publicar el cambio del enlace persistente
+
+```bash
+git add . && git commit -m "fix: conservar cita en el enlace" && git push origin main
+```

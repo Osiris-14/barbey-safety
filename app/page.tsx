@@ -55,6 +55,7 @@ function describeError(err: unknown): string {
 
 const STEPS = ["Fecha", "Hora", "Tus datos"];
 const CANCELLATION_TOKEN_KEY = "barbey-safety:cancellation-token";
+const CANCELLATION_QUERY_KEY = "cita";
 
 type SavedAppointment = {
   client_name: string;
@@ -110,14 +111,20 @@ export default function BookingPage() {
   // Conserva la cita en este navegador para que el cliente pueda gestionarla
   // aunque cierre y vuelva a abrir el enlace público.
   useEffect(() => {
-    const token = window.localStorage.getItem(CANCELLATION_TOKEN_KEY);
+    const url = new URL(window.location.href);
+    const tokenFromUrl = url.searchParams.get(CANCELLATION_QUERY_KEY);
+    const token = tokenFromUrl || window.localStorage.getItem(CANCELLATION_TOKEN_KEY);
     if (!token) return;
+
+    window.localStorage.setItem(CANCELLATION_TOKEN_KEY, token);
 
     fetch(`/api/cancel?token=${encodeURIComponent(token)}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok || !json?.ok || json.appointment.status === "cancelled") {
           window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
+          url.searchParams.delete(CANCELLATION_QUERY_KEY);
+          window.history.replaceState(null, "", url.toString());
           return;
         }
         setSavedAppointment({ ...json.appointment, cancellationToken: token });
@@ -318,6 +325,9 @@ export default function BookingPage() {
 
       const cancellationToken = json.appointment.cancellation_token as string;
       window.localStorage.setItem(CANCELLATION_TOKEN_KEY, cancellationToken);
+      const appointmentUrl = new URL(window.location.href);
+      appointmentUrl.searchParams.set(CANCELLATION_QUERY_KEY, cancellationToken);
+      window.history.replaceState(null, "", appointmentUrl.toString());
 
       // Confirmación por WhatsApp. La cita ya está guardada, así que un fallo
       // aquí no debe bloquear la pantalla de éxito.
@@ -433,6 +443,9 @@ export default function BookingPage() {
       setDone((current) => (current ? { ...current, cancelled: true } : current));
       setSavedAppointment(null);
       window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
+      const url = new URL(window.location.href);
+      url.searchParams.delete(CANCELLATION_QUERY_KEY);
+      window.history.replaceState(null, "", url.toString());
       await loadMonth();
     } catch (err) {
       console.error("[cancelación] falló:", err);
@@ -457,6 +470,9 @@ export default function BookingPage() {
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No pudimos cancelar la cita");
       setSavedAppointment(null);
       window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
+      const url = new URL(window.location.href);
+      url.searchParams.delete(CANCELLATION_QUERY_KEY);
+      window.history.replaceState(null, "", url.toString());
       await loadMonth();
     } catch (err) {
       console.error("[cancelación] falló:", err);
