@@ -5,6 +5,8 @@ Ejecuta estos comandos desde la carpeta del proyecto:
 ```bash
 git status
 git diff --check
+git config --local user.name "Osiris-14"
+git config --local user.email "osce1428@gmail.com"
 git add .
 git commit -m "feat: reservas seguras y cancelacion de citas"
 git push origin main
