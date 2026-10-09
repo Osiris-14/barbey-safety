@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { getSupabaseServer } from "@/lib/supabase-server";
 import { sendPush, vapidConfigured } from "@/lib/push";
 
 /** Ventana en la que un teléfono puede generar avisos tras agendar */
@@ -12,18 +12,29 @@ export const dynamic = "force-dynamic";
  * teléfono no se envía nada, para que nadie use el endpoint de spam.
  */
 export async function POST(req: Request) {
-  let phone: string | undefined;
+  let phone: unknown;
+  let cancellationToken: unknown;
   let message: { title: string; body: string } | undefined;
 
   try {
-    ({ phone, message } = await req.json());
+    ({ phone, cancellationToken, message } = await req.json());
   } catch {
     return Response.json({ ok: false, error: "JSON inválido" }, { status: 400 });
   }
 
-  if (!phone) {
+  if (
+    typeof phone !== "string" ||
+    !/^\+1\d{10}$/.test(phone) ||
+    typeof cancellationToken !== "string" ||
+    cancellationToken.length < 20 ||
+    (message !== undefined &&
+      (typeof message.title !== "string" ||
+        typeof message.body !== "string" ||
+        message.title.length > 100 ||
+        message.body.length > 300))
+  ) {
     return Response.json(
-      { ok: false, error: "Falta 'phone'" },
+      { ok: false, error: "Los datos del aviso no son válidos" },
       { status: 400 }
     );
   }
@@ -37,10 +48,13 @@ export async function POST(req: Request) {
 
   const since = new Date(Date.now() - WINDOW_MS).toISOString();
 
+  const supabase = getSupabaseServer();
   const { data: recent, error: lookupError } = await supabase
     .from("appointments")
     .select("id")
     .eq("client_phone", phone)
+    .eq("cancellation_token", cancellationToken)
+    .neq("status", "cancelled")
     .gte("created_at", since)
     .limit(1);
 
@@ -82,5 +96,14 @@ export async function POST(req: Request) {
     message ?? { title: "Nueva cita agendada", body: "Revisa el panel." }
   );
 
-  return Response.json({ ok: true, ...result });
+  if (result.failedEndpoints.length > 0) {
+    const { error } = await supabase
+      .from("push_subscriptions")
+      .delete()
+      .in("endpoint", result.failedEndpoints);
+    if (error) console.error("[push] no se pudieron limpiar suscripciones expiradas:", error);
+  }
+
+  const { failedEndpoints: _failedEndpoints, ...summary } = result;
+  return Response.json({ ok: true, ...summary });
 }

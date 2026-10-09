@@ -15,6 +15,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "pending", label: "Pendiente" },
   { value: "confirmed", label: "Asistió" },
   { value: "no_show", label: "No asistió" },
+  { value: "cancelled", label: "Cancelada" },
 ];
 
 /** Estados editables, sin la opción "todos" del filtro */
@@ -28,6 +29,7 @@ const SELECT_STYLES: Record<AppointmentStatus, string> = {
   pending: "border-edge bg-surface-2 text-content/70",
   confirmed: "border-[#4CAF50]/50 bg-[#4CAF50]/10 text-[#4CAF50]",
   no_show: "border-[#EF5350]/50 bg-[#EF5350]/10 text-[#EF5350]",
+  cancelled: "border-content/20 bg-content/5 text-content/50",
 };
 
 export default function AllAppointmentsPage() {

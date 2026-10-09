@@ -73,6 +73,7 @@ export default function BookingPage() {
   const [nowRd, setNowRd] = useState<RdClock | null>(null);
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [loadingDay, setLoadingDay] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
@@ -86,7 +87,10 @@ export default function BookingPage() {
     phone: string;
     date: string;
     time: string;
+    cancellationToken: string;
+    cancelled: boolean;
   } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -105,7 +109,7 @@ export default function BookingPage() {
     try {
       const [appts, blocks] = await Promise.all([
         supabase
-          .from("appointments")
+          .from("public_appointment_slots")
           .select("appointment_date, appointment_time")
           .gte("appointment_date", from)
           .lte("appointment_date", to),
@@ -135,14 +139,17 @@ export default function BookingPage() {
 
       setBooked(bookedMap);
       setBlocked(blockedMap);
+      setAvailabilityError(null);
     } catch (err) {
       console.error(
         "[disponibilidad] no se pudo leer appointments/blocked_slots:",
         err
       );
-      // Sin datos = sin ocupaciones conocidas: el mes queda todo libre.
+      // No mostramos turnos optimistamente: una lectura fallida no debe hacer
+      // creer al cliente que un horario ocupado está disponible.
       setBooked({});
       setBlocked({});
+      setAvailabilityError("No pudimos cargar la disponibilidad. Inténtalo de nuevo.");
     } finally {
       setLoadingMonth(false);
     }
@@ -170,7 +177,7 @@ export default function BookingPage() {
     try {
       const [appts, blocks] = await Promise.all([
         supabase
-          .from("appointments")
+          .from("public_appointment_slots")
           .select("appointment_time")
           .eq("appointment_date", dateKey),
         supabase
@@ -194,10 +201,12 @@ export default function BookingPage() {
           normalizeTime(r.slot_time as string)
         ),
       }));
+      setAvailabilityError(null);
     } catch (err) {
       console.error(`[disponibilidad] no se pudo leer el día ${dateKey}:`, err);
       setBooked((prev) => ({ ...prev, [dateKey]: [] }));
       setBlocked((prev) => ({ ...prev, [dateKey]: [] }));
+      setAvailabilityError("No pudimos cargar los horarios de este día.");
     } finally {
       setLoadingDay(false);
     }
@@ -217,10 +226,11 @@ export default function BookingPage() {
   const isDayDisabled = useCallback(
     (date: Date) => {
       const key = toDateKey(date);
+      if (availabilityError) return true;
       if (isPastDay(key, nowRd)) return true;
       return isDayFull(key, takenOn(key), nowRd);
     },
-    [nowRd, takenOn]
+    [availabilityError, nowRd, takenOn]
   );
 
   const canGoPrev = useMemo(() => {
@@ -253,203 +263,151 @@ export default function BookingPage() {
     setSubmitting(true);
     setError(null);
 
-    // Última verificación por si alguien reservó mientras el cliente escribía.
-    // Si la consulta falla seguimos adelante: el INSERT es la validación real.
+    // La reserva pasa por el servidor: allí se validan fecha, hora, bloqueos
+    // y carreras entre dos clientes que intentan tomar el mismo turno.
     try {
-      const { data: clash, error: clashError } = await supabase
-        .from("appointments")
-        .select("id")
-        .eq("appointment_date", selectedDate)
-        .eq("appointment_time", selectedTime)
-        .limit(1);
-
-      if (clashError) throw clashError;
-
-      if (clash && clash.length > 0) {
-        setError("Ese horario acaba de ser ocupado. Elige otro, por favor.");
-        setSubmitting(false);
-        setSelectedTime(null);
-        setStep(2);
-        await refreshDay(selectedDate);
-        return;
-      }
-    } catch (err) {
-      console.error("[cita] no se pudo verificar el horario:", err);
-    }
-
-    // Columnas exactas de la tabla appointments.
-    // appointment_date: 'YYYY-MM-DD' · appointment_time: 'HH:MM:SS'
-    const payload = {
-      client_name: name.trim(),
-      client_phone: fullPhone, // "+18295092814"
-      appointment_date: selectedDate,
-      appointment_time: `${selectedTime}:00`,
-      status: "pending",
-    };
-
-    // Aquí sí avisamos: callar un fallo le haría creer que quedó agendado.
-    let appointmentId: string | null = null;
-
-    try {
-      console.log("[cita] INSERT appointments:", payload);
-
-      const { data, error: insertError } = await supabase
-        .from("appointments")
-        .insert(payload)
-        .select();
-
-      if (insertError) throw insertError;
-
-      appointmentId = data?.[0]?.id ?? null;
-      console.log("[cita] guardada:", data);
-    } catch (err) {
-      console.error("[cita] falló el INSERT en appointments:", err, {
-        payload,
-      });
-      setError(`No pudimos guardar tu cita. ${describeError(err)}`);
-      setSubmitting(false);
-      return;
-    }
-
-    // Confirmación por WhatsApp. La cita ya está guardada, así que un fallo
-    // aquí no debe bloquear la pantalla de éxito: solo queda sin confirmar.
-    try {
-      const res = await fetch("/api/whatsapp", {
+      const res = await fetch("/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: name.trim(),
           phone: fullPhone,
-          message: `✂️ Hola ${name.trim()}, tu cita en *Yoan BarberShop* está confirmada para el *${formatLongDate(
-            selectedDate
-          )}* a las *${formatTime(selectedTime)}*. ¡Te esperamos!`,
+          date: selectedDate,
+          time: selectedTime,
         }),
       });
-
       const json = await res.json();
 
-      if (!res.ok || !json?.ok) {
-        console.error("[whatsapp] no se envió la confirmación:", json);
-      } else if (appointmentId) {
-        const { error: flagError } = await supabase
-          .from("appointments")
-          .update({ confirmation_sent: true })
-          .eq("id", appointmentId);
-
-        if (flagError) {
-          console.error(
-            "[whatsapp] no se pudo marcar confirmation_sent:",
-            flagError
-          );
+      if (!res.ok || !json?.ok || !json.appointment?.cancellation_token) {
+        if (res.status === 409) {
+          setSelectedTime(null);
+          setStep(2);
+          await refreshDay(selectedDate);
         }
+        throw new Error(json?.error ?? "No pudimos guardar tu cita");
       }
-    } catch (err) {
-      console.error("[whatsapp] error enviando la confirmación:", err);
-    }
 
-    // Si la cita es en menos de 15 minutos, el cron ya no alcanza a avisar:
-    // mandamos el recordatorio aquí mismo y la marcamos para que no lo repita.
-    const faltan = minutesUntil(selectedDate, selectedTime);
-    const necesitaRecordatorioYa = faltan < 15;
+      const cancellationToken = json.appointment.cancellation_token as string;
 
-    console.log(
-      `[recordatorio] cita ${selectedDate} ${selectedTime} · faltan ${faltan.toFixed(
-        1
-      )} min · envío inmediato: ${necesitaRecordatorioYa ? "SÍ" : "no, lo toma el cron"}`
-    );
-
-    if (necesitaRecordatorioYa) {
-      // El tiempo real, no un "15 minutos" fijo que sería falso a 2 minutos.
-      // Menos de 1 incluye los negativos, así que una cita ya empezada
-      // tampoco anuncia un futuro que no existe.
-      const restantes = Math.round(faltan);
-      const cuando =
-        faltan < 1
-          ? "es ahora mismo"
-          : `es en ${restantes} ${restantes === 1 ? "minuto" : "minutos"}`;
-
+      // Confirmación por WhatsApp. La cita ya está guardada, así que un fallo
+      // aquí no debe bloquear la pantalla de éxito.
       try {
-        const res = await fetch("/api/whatsapp", {
+        const whatsapp = await fetch("/api/whatsapp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             phone: fullPhone,
-            message: `⏰ Hola ${name.trim()}, tu cita en *Yoan BarberShop* ${cuando} a las *${formatTime(
-              selectedTime
-            )}*. ¡Te esperamos!`,
+            cancellationToken,
+            type: "confirmation",
+            message: `✂️ Hola ${name.trim()}, tu cita en *Yoan BarberShop* está confirmada para el *${formatLongDate(
+              selectedDate
+            )}* a las *${formatTime(selectedTime)}*. ¡Te esperamos!`,
           }),
         });
 
-        const json = await res.json();
-
-        if (!res.ok || !json?.ok) {
-          console.error(
-            `[recordatorio] UltraMsg no lo envió (HTTP ${res.status}):`,
-            json
-          );
-        } else if (!appointmentId) {
-          console.error(
-            "[recordatorio] enviado, pero sin id de cita: no se pudo marcar reminder_sent"
-          );
-        } else {
-          // .select() delata el rechazo silencioso de RLS: si una política
-          // filtra la fila, el UPDATE afecta 0 filas y no devuelve error.
-          const { data: flagged, error: flagError } = await supabase
-            .from("appointments")
-            .update({ reminder_sent: true })
-            .eq("id", appointmentId)
-            .select();
-
-          if (flagError) {
-            console.error(
-              "[recordatorio] no se pudo marcar reminder_sent:",
-              flagError
-            );
-          } else if (!flagged || flagged.length === 0) {
-            console.error(
-              "[recordatorio] enviado, pero reminder_sent no se guardó (0 filas). El cron podría repetirlo."
-            );
-          } else {
-            console.log("[recordatorio] enviado y marcado reminder_sent");
-          }
+        const whatsappJson = await whatsapp.json();
+        if (!whatsapp.ok || !whatsappJson?.ok) {
+          console.error("[whatsapp] no se envió la confirmación:", whatsappJson);
         }
       } catch (err) {
-        console.error("[recordatorio] error enviándolo:", err);
+        console.error("[whatsapp] error enviando la confirmación:", err);
       }
-    }
 
-    // Aviso push al barbero. Mismo criterio que la confirmación: la cita ya
-    // está guardada, un fallo aquí no debe bloquear la pantalla de éxito.
+      const faltan = minutesUntil(selectedDate, selectedTime);
+      const necesitaRecordatorioYa = faltan < 15;
+
+      if (necesitaRecordatorioYa) {
+        const restantes = Math.round(faltan);
+        const cuando =
+          faltan < 1
+            ? "es ahora mismo"
+            : `es en ${restantes} ${restantes === 1 ? "minuto" : "minutos"}`;
+
+        try {
+          const reminder = await fetch("/api/whatsapp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phone: fullPhone,
+              cancellationToken,
+              type: "reminder",
+              message: `⏰ Hola ${name.trim()}, tu cita en *Yoan BarberShop* ${cuando} a las *${formatTime(
+                selectedTime
+              )}*. ¡Te esperamos!`,
+            }),
+          });
+          const reminderJson = await reminder.json();
+          if (!reminder.ok || !reminderJson?.ok) {
+            console.error("[recordatorio] no se envió:", reminderJson);
+          }
+        } catch (err) {
+          console.error("[recordatorio] error enviándolo:", err);
+        }
+      }
+
+      // Aviso push al barbero. Un fallo aquí tampoco bloquea la confirmación.
+      try {
+        const push = await fetch("/api/push/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: fullPhone,
+            cancellationToken,
+            message: {
+              title: "Nueva cita agendada",
+              body: `${name.trim()} · ${formatLongDate(
+                selectedDate
+              )} a las ${formatTime(selectedTime)}`,
+            },
+          }),
+        });
+        const pushJson = await push.json();
+        if (!push.ok || !pushJson?.ok) {
+          console.error("[push] no se envió la notificación:", pushJson);
+        }
+      } catch (err) {
+        console.error("[push] error notificando al barbero:", err);
+      }
+
+      setDone({
+        name: name.trim(),
+        phone: fullPhone,
+        date: selectedDate,
+        time: selectedTime,
+        cancellationToken,
+        cancelled: false,
+      });
+    } catch (err) {
+      console.error("[cita] no se pudo guardar:", err);
+      setError(describeError(err));
+      setSubmitting(false);
+      return;
+    }
+    setSubmitting(false);
+  };
+
+  const cancelAppointment = async () => {
+    if (!done || done.cancelled || cancelling) return;
+    if (!window.confirm("¿Seguro que quieres cancelar esta cita?")) return;
+
+    setCancelling(true);
+    setError(null);
     try {
-      const res = await fetch("/api/push/notify", {
+      const res = await fetch("/api/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: fullPhone,
-          message: {
-            title: "Nueva cita agendada",
-            body: `${name.trim()} · ${formatLongDate(
-              selectedDate
-            )} a las ${formatTime(selectedTime)}`,
-          },
-        }),
+        body: JSON.stringify({ token: done.cancellationToken }),
       });
-
       const json = await res.json();
-
-      if (!res.ok || !json?.ok) {
-        console.error("[push] no se envió la notificación:", json);
-      }
+      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No pudimos cancelar la cita");
+      setDone((current) => (current ? { ...current, cancelled: true } : current));
+      await loadMonth();
     } catch (err) {
-      console.error("[push] error notificando al barbero:", err);
+      console.error("[cancelación] falló:", err);
+      setError(describeError(err));
+    } finally {
+      setCancelling(false);
     }
-
-    setDone({
-      name: name.trim(),
-      phone: fullPhone,
-      date: selectedDate,
-      time: selectedTime,
-    });
-    setSubmitting(false);
   };
 
   const resetAll = () => {
@@ -472,9 +430,13 @@ export default function BookingPage() {
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15">
             <CheckCircle2 className="h-9 w-9 text-primary" />
           </div>
-          <h1 className="text-2xl font-semibold">¡Cita agendada!</h1>
+          <h1 className="text-2xl font-semibold">
+            {done.cancelled ? "Cita cancelada" : "¡Cita agendada!"}
+          </h1>
           <p className="mt-2 text-sm text-content/60">
-            Te esperamos en Yoan BarberShop.
+            {done.cancelled
+              ? "El horario volvió a estar disponible para otros clientes."
+              : "Te esperamos en Yoan BarberShop."}
           </p>
 
           <dl className="mt-6 space-y-3 rounded-xl border border-edge bg-surface-2 p-5 text-left text-sm">
@@ -500,9 +462,19 @@ export default function BookingPage() {
             </div>
           </dl>
 
+          {!done.cancelled && (
+            <button
+              onClick={cancelAppointment}
+              disabled={cancelling}
+              className="mt-6 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {cancelling ? "Cancelando…" : "Cancelar cita"}
+            </button>
+          )}
+
           <button
             onClick={resetAll}
-            className="mt-6 w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm font-medium transition hover:border-primary/50 hover:text-primary"
+            className={`${done.cancelled ? "mt-6" : "mt-3"} w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm font-medium transition hover:border-primary/50 hover:text-primary`}
           >
             Agendar otra cita
           </button>
@@ -597,6 +569,12 @@ export default function BookingPage() {
           {error && (
             <p className="mb-4 break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {error}
+            </p>
+          )}
+
+          {availabilityError && (
+            <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+              {availabilityError}
             </p>
           )}
 

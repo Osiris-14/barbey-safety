@@ -39,12 +39,13 @@ Commit y push.
 
 1. [vercel.com](https://vercel.com) → **Add New** → **Project**
 2. Importa `pedro-barbershop`
-3. **Environment Variables** — las seis:
+3. **Environment Variables** — las variables:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 NEXT_PUBLIC_SUPABASE_SCHEMA=pedro
+SUPABASE_SERVICE_ROLE_KEY=
 ULTRAMSG_INSTANCE_ID=
 ULTRAMSG_TOKEN=
 CRON_SECRET=
@@ -53,7 +54,9 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:pedro@barbershop.do
 ```
 
-Las de UltraMsg salen del paso 5; puedes dejarlas vacías y volver.
+La `SUPABASE_SERVICE_ROLE_KEY` es privada: nunca debe llevar el prefijo
+`NEXT_PUBLIC_` ni aparecer en el navegador. Las de UltraMsg salen del paso 5;
+puedes dejarlas vacías y volver.
 
 Genera las claves VAPID de las notificaciones push:
 
@@ -86,6 +89,11 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 3. **Settings → API → Exposed schemas**: añade `pedro` y guarda
 4. **Authentication → Users → Add user**: correo y contraseña del barbero,
    marcando **Auto Confirm User**
+
+Si el cliente ya tenía una instalación anterior, ejecuta también
+[`scripts/upgrade-cliente.sql`](upgrade-cliente.sql), reemplazando
+`NOMBRE_CLIENTE` por su esquema. Esa migración añade la cancelación, la
+protección contra reservas duplicadas y la vista pública mínima.
 
 > El paso 3 no es opcional. Sin exponer el esquema, PostgREST devuelve 404
 > en cada consulta aunque las tablas existan. Y sin *Auto Confirm* el
@@ -146,6 +154,8 @@ Antes de entregarle la app al cliente:
 - [ ] En el panel, el barbero activa las notificaciones push; luego agenda
       una cita de prueba y le llega el aviso en la barra de notificaciones
 - [ ] Agenda una cita de prueba con tu número: llega la confirmación
+- [ ] En la pantalla de éxito pulsa “Cancelar cita” y comprueba que el turno
+      vuelve a estar disponible
 - [ ] Agenda otra a 20 minutos: el recordatorio llega ~15 min antes
 - [ ] Borra las citas de prueba desde el panel
 
@@ -165,6 +175,7 @@ navegador tenga sesión — el aviso ámbar de `/admin` lo indica.
 | Instancia de UltraMsg | | ✅ |
 | Proyecto de Vercel | | ✅ |
 | `CRON_SECRET` | | ✅ |
+| `SUPABASE_SERVICE_ROLE_KEY` | | compartida, privada |
 
 Un solo proyecto de Supabase aguanta muchos barberos, pero **la anon key
 es la misma para todos**. Con RLS activo eso limita el daño a lo que

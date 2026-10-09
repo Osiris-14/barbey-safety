@@ -1,9 +1,7 @@
 -- Row Level Security — ejecutar completo en el SQL editor de Supabase.
 --
--- IMPORTANTE: ejecuta las DOS partes. Con solo la parte 1 la app se rompe:
--- el rol `anon` pierde el UPDATE y dejan de funcionar los recordatorios
--- (se reenviarían cada minuto sin poder marcarse) y las banderas
--- confirmation_sent / reminder_sent que escribe la página del cliente.
+-- La app pública no recibe permisos directos sobre appointments: las reservas
+-- y los cambios de banderas pasan por rutas de servidor con service role.
 
 -- ═══════════════════════════════════════════════════════════
 -- PARTE 1 — activar RLS y políticas base
@@ -14,57 +12,46 @@ alter table blocked_slots enable row level security;
 alter table push_subscriptions enable row level security;
 
 -- El barbero autenticado puede todo
+drop policy if exists "auth solo" on appointments;
 create policy "auth solo" on appointments
   for all to authenticated using (true)
   with check (true);
 
+drop policy if exists "auth solo" on blocked_slots;
 create policy "auth solo" on blocked_slots
   for all to authenticated using (true)
   with check (true);
 
--- El cliente puede agendar sin estar autenticado
-create policy "insert publico" on appointments
-  for insert to anon with check (true);
+-- Las reservas pasan por /api/appointments, que valida el turno usando la
+-- service role. Así anon no puede insertar fechas arbitrarias ni leer PII.
+revoke select, insert, update on appointments from anon;
+drop policy if exists "leer publico" on appointments;
+drop policy if exists "insert publico" on appointments;
 
--- El cliente necesita leer las citas para saber qué horas están ocupadas
-create policy "leer publico" on appointments
-  for select to anon using (true);
+-- La página pública solo lee fecha/hora desde la vista reducida.
+grant select on public_appointment_slots to anon;
 
 -- El cliente necesita leer los horarios bloqueados
+drop policy if exists "leer publico" on blocked_slots;
 create policy "leer publico" on blocked_slots
   for select to anon using (true);
 
 -- El barbero registra sus suscripciones push desde el panel (authenticated).
--- anon solo las lee: /api/push/notify corre con la anon key en el servidor
--- y necesita ver a quién notificar cuando alguien agenda.
+-- /api/push/notify usa la service role en el servidor.
+drop policy if exists "auth solo" on push_subscriptions;
 create policy "auth solo" on push_subscriptions
   for all to authenticated using (true)
   with check (true);
 
-create policy "leer publico" on push_subscriptions
-  for select to anon using (true);
+revoke select on push_subscriptions from anon;
+drop policy if exists "leer publico" on push_subscriptions;
 
 -- ═══════════════════════════════════════════════════════════
--- PARTE 2 — sin esto la app queda rota
+-- PARTE 2 — retirar permisos públicos heredados
 -- ═══════════════════════════════════════════════════════════
---
--- Quién escribe qué, y con qué rol:
---
---   app/page.tsx        confirmation_sent, reminder_sent   anon
---   /api/reminders      reminder_sent                      anon
---   panel /admin        status, blocked_slots              authenticated
---
--- El panel ya está cubierto por "auth solo". Lo que falta es permitir que
--- `anon` marque las dos banderas — y NADA más. El GRANT a nivel de columna
--- es lo que impide que alguien cambie status, nombre, teléfono o fecha:
--- la política habilita el UPDATE, el GRANT limita a qué columnas alcanza.
 
 revoke update on appointments from anon;
-grant update (confirmation_sent, reminder_sent) on appointments to anon;
-
-create policy "banderas publicas" on appointments
-  for update to anon using (true)
-  with check (true);
+drop policy if exists "banderas publicas" on appointments;
 
 -- ═══════════════════════════════════════════════════════════
 -- PARTE 3 — permisos del barbero
@@ -80,15 +67,12 @@ grant select, insert, update, delete on appointments to authenticated;
 grant select, insert, update, delete on blocked_slots to authenticated;
 grant select, insert, update, delete on push_subscriptions to authenticated;
 
--- anon lee push_subscriptions (lo necesita /api/push/notify)
-grant select on push_subscriptions to anon;
-
 -- ═══════════════════════════════════════════════════════════
 -- Comprobación
 -- ═══════════════════════════════════════════════════════════
 --
 -- Permisos por rol (authenticated debe tener UPDATE en appointments;
--- anon solo debe aparecer con UPDATE en confirmation_sent y reminder_sent):
+-- anon debe tener SELECT solo sobre la vista y blocked_slots):
 --
 -- select grantee, privilege_type, table_name
 --   from information_schema.role_table_grants

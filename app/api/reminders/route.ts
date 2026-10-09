@@ -1,4 +1,5 @@
-import { supabase, type Appointment } from "@/lib/supabase";
+import { type Appointment } from "@/lib/supabase";
+import { getSupabaseServer } from "@/lib/supabase-server";
 import { formatTime, rdDateKey, rdNow, rdTimeKey } from "@/lib/schedule";
 import { sendWhatsApp, wasSent } from "@/lib/whatsapp";
 
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
   }
 
   const nowRd = rdNow();
+  const supabase = getSupabaseServer();
 
   // Objetivo: citas que empiezan en exactamente 15 minutos.
   // Se busca entre +14 y +16 para dar 2 minutos de holgura, por si el cron
@@ -46,6 +48,7 @@ export async function GET(request: Request) {
     .select("*")
     .eq("reminder_sent", false)
     .neq("status", "no_show")
+    .neq("status", "cancelled")
     .eq("appointment_date", today)
     .gte("appointment_time", fromTime)
     .lte("appointment_time", toTime);
@@ -62,6 +65,23 @@ export async function GET(request: Request) {
   let sent = 0;
 
   for (const appointment of pending) {
+    // Reclamo atómicamente la cita para que dos ejecuciones simultáneas del
+    // cron no envíen dos WhatsApp. Un reclamo abandonado caduca en 5 minutos.
+    const claimBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: claimed, error: claimError } = await supabase
+      .from("appointments")
+      .update({ reminder_claimed_at: new Date().toISOString() })
+      .eq("id", appointment.id)
+      .eq("reminder_sent", false)
+      .or(`reminder_claimed_at.is.null,reminder_claimed_at.lt.${claimBefore}`)
+      .select("id");
+
+    if (claimError) {
+      console.error(`[recordatorios] no se pudo reclamar la cita ${appointment.id}:`, claimError);
+      continue;
+    }
+    if (!claimed || claimed.length === 0) continue;
+
     try {
       const result = await sendWhatsApp(
         appointment.client_phone,
@@ -75,13 +95,17 @@ export async function GET(request: Request) {
           `[recordatorios] UltraMsg rechazó la cita ${appointment.id}:`,
           result
         );
+        await supabase
+          .from("appointments")
+          .update({ reminder_claimed_at: null })
+          .eq("id", appointment.id);
         continue;
       }
 
       // Solo marcamos tras un envío confirmado; si falla, el cron reintenta.
       const { error: flagError } = await supabase
         .from("appointments")
-        .update({ reminder_sent: true })
+        .update({ reminder_sent: true, reminder_claimed_at: null })
         .eq("id", appointment.id);
 
       if (flagError) {
@@ -97,6 +121,10 @@ export async function GET(request: Request) {
         `[recordatorios] error enviando la cita ${appointment.id}:`,
         err
       );
+      await supabase
+        .from("appointments")
+        .update({ reminder_claimed_at: null })
+        .eq("id", appointment.id);
     }
   }
 
@@ -110,6 +138,7 @@ export async function GET(request: Request) {
     .select("id")
     .eq("reminder_sent", false)
     .neq("status", "no_show")
+    .neq("status", "cancelled")
     .eq("appointment_date", rdDateKey(nowRd))
     .lt("appointment_time", fromTime);
 
@@ -122,7 +151,7 @@ export async function GET(request: Request) {
     const ids = expired.map((row) => row.id as string);
     const { error: markError } = await supabase
       .from("appointments")
-      .update({ reminder_sent: true })
+      .update({ reminder_sent: true, reminder_claimed_at: null })
       .in("id", ids);
 
     if (markError) {

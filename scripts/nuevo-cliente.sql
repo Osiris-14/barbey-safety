@@ -32,11 +32,13 @@ create table NOMBRE_CLIENTE.appointments (
   client_phone text not null,
   appointment_date date not null,
   appointment_time time not null,
-  status text default 'pending'
-    check (status in ('pending', 'confirmed', 'no_show')),
+  status text not null default 'pending'
+    check (status in ('pending', 'confirmed', 'no_show', 'cancelled')),
   confirmation_sent boolean default false,
   reminder_sent boolean default false,
-  created_at timestamptz default now()
+  reminder_claimed_at timestamptz,
+  created_at timestamptz default now(),
+  cancellation_token text not null unique default gen_random_uuid()::text
 );
 
 create table NOMBRE_CLIENTE.blocked_slots (
@@ -60,7 +62,17 @@ create index on NOMBRE_CLIENTE.appointments(appointment_date);
 -- La app ya comprueba antes de insertar, pero eso deja una ventana de
 -- carrera que solo el índice cierra de verdad.
 create unique index NOMBRE_CLIENTE_unique_slot
-  on NOMBRE_CLIENTE.appointments(appointment_date, appointment_time);
+  on NOMBRE_CLIENTE.appointments(appointment_date, appointment_time)
+  where status <> 'cancelled';
+
+create unique index NOMBRE_CLIENTE_blocked_unique_slot
+  on NOMBRE_CLIENTE.blocked_slots(slot_date, slot_time);
+
+-- Vista mínima para que el cliente solo pueda consultar disponibilidad.
+create view NOMBRE_CLIENTE.public_appointment_slots as
+  select appointment_date, appointment_time
+    from NOMBRE_CLIENTE.appointments
+   where status <> 'cancelled';
 
 -- ═══════════════════════════════════════════════════════════
 -- RLS — las tres partes de supabase/rls.sql, ya adaptadas
@@ -81,45 +93,32 @@ create policy "auth solo" on NOMBRE_CLIENTE.blocked_slots
   for all to authenticated using (true)
   with check (true);
 
--- El cliente puede agendar sin estar autenticado
-create policy "insert publico" on NOMBRE_CLIENTE.appointments
-  for insert to anon with check (true);
-
--- El cliente necesita leer las citas para saber qué horas están ocupadas
-create policy "leer publico" on NOMBRE_CLIENTE.appointments
-  for select to anon using (true);
+-- Las reservas pasan por /api/appointments, con validación en servidor.
 
 -- El cliente necesita leer los horarios bloqueados
 create policy "leer publico" on NOMBRE_CLIENTE.blocked_slots
   for select to anon using (true);
 
 -- El barbero registra sus suscripciones push desde el panel (authenticated).
--- anon solo las lee: /api/push/notify corre con la anon key en el servidor.
+-- /api/push/notify usa la service role en el servidor.
 create policy "auth solo" on NOMBRE_CLIENTE.push_subscriptions
   for all to authenticated using (true)
   with check (true);
 
-create policy "leer publico" on NOMBRE_CLIENTE.push_subscriptions
-  for select to anon using (true);
+revoke select on NOMBRE_CLIENTE.push_subscriptions from anon;
+drop policy if exists "leer publico" on NOMBRE_CLIENTE.push_subscriptions;
 
 -- ─── Parte 2: permisos del cliente anónimo ─────────────────
 --
--- Una política no otorga permisos: Postgres exige el GRANT sobre la tabla
--- Y una política que deje pasar la fila.
---
--- El UPDATE por columna es lo que hace esto seguro. `anon` marca las dos
--- banderas que escribe la app —confirmation_sent al enviar la
--- confirmación, reminder_sent al enviar el recordatorio— y nada más: no
--- puede tocar status, nombre, teléfono ni fecha.
+-- El cliente solo recibe disponibilidad reducida. Las rutas de servidor usan
+-- service role para crear/cancelar citas y actualizar banderas.
 
-grant select, insert on NOMBRE_CLIENTE.appointments to anon;
+grant select on NOMBRE_CLIENTE.public_appointment_slots to anon;
 grant select on NOMBRE_CLIENTE.blocked_slots to anon;
-grant update (confirmation_sent, reminder_sent)
-  on NOMBRE_CLIENTE.appointments to anon;
-
-create policy "banderas publicas" on NOMBRE_CLIENTE.appointments
-  for update to anon using (true)
-  with check (true);
+revoke select, insert, update on NOMBRE_CLIENTE.appointments from anon;
+drop policy if exists "insert publico" on NOMBRE_CLIENTE.appointments;
+drop policy if exists "leer publico" on NOMBRE_CLIENTE.appointments;
+drop policy if exists "banderas publicas" on NOMBRE_CLIENTE.appointments;
 
 -- ─── Parte 3: permisos del barbero ─────────────────────────
 
@@ -129,9 +128,6 @@ grant select, insert, update, delete
   on NOMBRE_CLIENTE.blocked_slots to authenticated;
 grant select, insert, update, delete
   on NOMBRE_CLIENTE.push_subscriptions to authenticated;
-
--- anon lee push_subscriptions (lo necesita /api/push/notify)
-grant select on NOMBRE_CLIENTE.push_subscriptions to anon;
 
 -- ═══════════════════════════════════════════════════════════
 -- Comprobación
@@ -148,7 +144,7 @@ grant select on NOMBRE_CLIENTE.push_subscriptions to anon;
 --   from pg_policies where schemaname = 'NOMBRE_CLIENTE'
 --  order by tablename, policyname;
 --
--- anon solo puede actualizar las dos banderas:
+-- anon no tiene acceso directo a appointments:
 --
 -- select privilege_type, column_name
 --   from information_schema.column_privileges

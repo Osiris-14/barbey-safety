@@ -11,7 +11,8 @@ import {
   formatLongDate,
   formatTime,
   normalizeTime,
-  toDateKey,
+  rdDateKey,
+  rdNow,
 } from "@/lib/schedule";
 
 export default function BlockedSlotsPage() {
@@ -21,7 +22,7 @@ export default function BlockedSlotsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [date, setDate] = useState(() => toDateKey(new Date()));
+  const [date, setDate] = useState(() => rdDateKey(rdNow()));
   const [time, setTime] = useState<string>(TIME_SLOTS[0]);
 
   const load = useCallback(async () => {
@@ -106,7 +107,7 @@ export default function BlockedSlotsPage() {
           <input
             type="date"
             value={date}
-            min={toDateKey(new Date())}
+            min={rdDateKey(rdNow())}
             onChange={(e) => setDate(e.target.value)}
             required
             className="min-h-[44px] w-full rounded-xl border border-edge bg-surface-2 px-4 text-sm outline-none transition focus:border-primary sm:w-auto"

@@ -32,7 +32,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   db: { schema: SUPABASE_SCHEMA },
 });
 
-export type AppointmentStatus = "pending" | "confirmed" | "no_show";
+export type AppointmentStatus = "pending" | "confirmed" | "no_show" | "cancelled";
 
 export type Appointment = {
   id: string;
@@ -41,8 +41,10 @@ export type Appointment = {
   appointment_date: string; // YYYY-MM-DD
   appointment_time: string; // HH:MM:SS
   status: AppointmentStatus;
+  cancellation_token: string;
   confirmation_sent: boolean;
   reminder_sent: boolean;
+  reminder_claimed_at: string | null;
   created_at: string;
 };
 

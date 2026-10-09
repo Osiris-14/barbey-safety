@@ -29,7 +29,7 @@ export function vapidConfigured(): boolean {
 export async function sendPush(
   subscriptions: PushSubscriptionRow[],
   payload: { title: string; body: string; url?: string }
-): Promise<{ sent: number; failed: number }> {
+): Promise<{ sent: number; failed: number; failedEndpoints: string[] }> {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
@@ -38,13 +38,18 @@ export async function sendPush(
     console.error(
       "[push] faltan NEXT_PUBLIC_VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY o VAPID_SUBJECT"
     );
-    return { sent: 0, failed: subscriptions.length };
+    return {
+      sent: 0,
+      failed: subscriptions.length,
+      failedEndpoints: subscriptions.map((sub) => sub.endpoint),
+    };
   }
 
   webpush.setVapidDetails(subject, publicKey, privateKey);
 
   let sent = 0;
   let failed = 0;
+  const failedEndpoints: string[] = [];
 
   for (const sub of subscriptions) {
     try {
@@ -61,8 +66,13 @@ export async function sendPush(
       // 404/410 = el suscriptor se dio de baja; el resto son errores reales
       console.error("[push] falló el envío a un suscriptor:", err);
       failed++;
+      const statusCode =
+        err && typeof err === "object" && "statusCode" in err
+          ? Number((err as { statusCode?: unknown }).statusCode)
+          : 0;
+      if (statusCode === 404 || statusCode === 410) failedEndpoints.push(sub.endpoint);
     }
   }
 
-  return { sent, failed };
+  return { sent, failed, failedEndpoints };
 }

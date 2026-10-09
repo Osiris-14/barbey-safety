@@ -6,7 +6,7 @@ import type { Appointment, AppointmentStatus } from "@/lib/supabase";
 // Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
 // leerlo como `supabase` hace pensar que es el cliente anónimo.
 import { supabaseAuth } from "@/lib/supabase-auth";
-import { formatLongDate, formatTime, toDateKey } from "@/lib/schedule";
+import { formatLongDate, formatTime, rdDateKey, rdNow } from "@/lib/schedule";
 
 const POLL_MS = 30_000;
 
@@ -15,6 +15,7 @@ const CARD_STYLES: Record<AppointmentStatus, string> = {
   pending: "bg-[#1C1C1C] border-[#2E2E2E]",
   confirmed: "bg-[#1A2E1A] border-[#4CAF50]",
   no_show: "bg-[#2E1A1A] border-[#EF5350]",
+  cancelled: "bg-[#252525] border-[#777]",
 };
 
 /** Badge de estado, arriba a la derecha de cada card */
@@ -32,10 +33,14 @@ const BADGE_STYLES: Record<AppointmentStatus, { label: string; className: string
       label: "No asistió",
       className: "border-[#EF5350]/50 bg-[#EF5350]/10 text-[#EF5350]",
     },
+    cancelled: {
+      label: "Cancelada",
+      className: "border-content/20 bg-content/5 text-content/50",
+    },
   };
 
 export default function AdminTodayPage() {
-  const todayKey = useMemo(() => toDateKey(new Date()), []);
+  const todayKey = useMemo(() => rdDateKey(rdNow()), []);
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,6 +247,11 @@ export default function AdminTodayPage() {
                       <>
                         <Check className="h-4 w-4" />
                         Confirmado
+                      </>
+                    ) : a.status === "cancelled" ? (
+                      <>
+                        <X className="h-4 w-4" />
+                        Cancelada
                       </>
                     ) : (
                       <>

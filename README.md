@@ -1,8 +1,9 @@
 # Yoan BarberShop
 
 App de citas para barbería. El cliente agenda desde un enlace público sin
-registrarse, y el barbero gestiona el día desde un panel protegido. Las
-confirmaciones y los recordatorios salen por WhatsApp automáticamente.
+registrarse, puede cancelar su cita desde la pantalla de confirmación, y el
+barbero gestiona el día desde un panel protegido. Las confirmaciones y los
+recordatorios salen por WhatsApp automáticamente.
 
 > **¿Instalando esto para un cliente nuevo?**
 > → [`scripts/onboarding.md`](scripts/onboarding.md) — 10-15 minutos.
@@ -43,14 +44,17 @@ Para un cliente nuevo en un esquema aparte, usa
 | `/admin/appointments` | Todas las citas, con filtros | con sesión |
 | `/admin/blocked` | Bloquear horarios | con sesión |
 | `/admin/login` | Entrada del barbero | público |
-| `/api/whatsapp` | Envía un mensaje | exige cita reciente |
+| `/api/whatsapp` | Envía confirmación/recordatorio | exige token de cita reciente |
 | `/api/reminders` | Recordatorios de dentro de 15 min | exige `CRON_SECRET` |
-| `/api/push/notify` | Aviso push al barbero al agendar | exige cita reciente |
+| `/api/push/notify` | Aviso push al barbero al agendar | exige token de cita reciente |
+| `/api/appointments` | Valida y crea una cita | público, validado en servidor |
+| `/api/cancel` | Cancela una cita y libera el turno | exige token privado |
 
 ## Estructura
 
 ```
 lib/supabase.ts        cliente de datos + tipos
+lib/supabase-server.ts  cliente service role, solo servidor
 lib/supabase-auth.ts   cliente con sesión en cookies (panel y login)
 lib/schedule.ts        turnos, hora dominicana, disponibilidad
 lib/whatsapp.ts        cliente de UltraMsg (solo servidor)
@@ -75,8 +79,9 @@ supabase/              esquema y políticas de RLS
 
 ## Recordatorios
 
-`/api/reminders` busca citas con `reminder_sent = false`, `status =
-'pending'` y hora entre **+14 y +16 minutos**: avisa 15 minutos antes, con
+`/api/reminders` busca citas con `reminder_sent = false`, que no estén
+canceladas ni marcadas como ausencia, y hora entre **+14 y +16 minutos**: avisa
+15 minutos antes, con
 2 de holgura por si el cron se desfasa. `reminder_sent` se marca solo tras
 un envío confirmado, así que nadie recibe dos avisos y un fallo se
 reintenta al minuto siguiente.
@@ -91,14 +96,18 @@ porque el cron ya no llega a tiempo.
 - `/admin` protegido por middleware con `getUser()`, que valida el token
   contra Supabase — `getSession()` solo decodifica la cookie y una
   fabricada pasaría.
-- RLS activo: `anon` puede leer y agendar, y solo puede actualizar
-  `confirmation_sent` y `reminder_sent`. El resto exige sesión.
-- `/api/whatsapp` exige una cita con ese teléfono creada hace menos de 2
-  minutos; si no, 403. Sin eso sería un relay de spam a costa de tu
-  cuenta de UltraMsg.
-- `/api/push/notify` usa la misma protección que `/api/whatsapp`: sin una
-  cita reciente con ese teléfono no se envía ningún push.
+- RLS activo: `anon` solo puede leer la vista pública de fechas/horas
+  ocupadas. Crear y cancelar citas pasa por rutas de servidor; el resto exige
+  sesión.
+- Los nombres, teléfonos y tokens no se exponen en las consultas públicas.
+- Un índice único parcial evita dobles reservas y una cita cancelada libera el
+  turno inmediatamente.
+- `/api/whatsapp` y `/api/push/notify` exigen el token privado de una cita
+  recién creada.
 - `/api/reminders` exige `Authorization: Bearer $CRON_SECRET`.
+- La creación limita a cinco reservas activas por teléfono cada 24 horas.
+  Para tráfico público conviene añadir rate limiting por IP en Vercel,
+  Upstash o un WAF.
 
 ## Notificaciones push
 
@@ -114,3 +123,5 @@ bloqueado.
 - La anon key es la misma para todos los clientes alojados en un mismo
   proyecto de Supabase. Ver la nota final de `scripts/onboarding.md`.
 - El panel no distingue barberos: quien tenga usuario ve todo el esquema.
+- El envío de avisos depende de UltraMsg y del cron externo; si esos servicios
+  fallan, la cita queda guardada y el panel sigue funcionando.
