@@ -22,3 +22,9 @@ git add -f .env.local
 ```
 
 Ese comando está prohibido.
+
+## Publicar el cambio del panel de cancelación
+
+```bash
+git add . && git commit -m "fix: conservar cita para cancelarla al volver" && git push origin main
+```

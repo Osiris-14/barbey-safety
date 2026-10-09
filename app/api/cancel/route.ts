@@ -2,6 +2,37 @@ import { getSupabaseServer } from "@/lib/supabase-server";
 
 export const dynamic = "force-dynamic";
 
+function validToken(token: string | null): boolean {
+  return Boolean(token && token.length >= 20 && token.length <= 100);
+}
+
+export async function GET(request: Request) {
+  const token = new URL(request.url).searchParams.get("token");
+
+  if (!validToken(token)) {
+    return Response.json({ ok: false, error: "Token de cancelación inválido" }, { status: 400 });
+  }
+
+  try {
+    const supabase = getSupabaseServer();
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("client_name, client_phone, appointment_date, appointment_time, status")
+      .eq("cancellation_token", token)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      return Response.json({ ok: false, error: "No encontramos esa cita" }, { status: 404 });
+    }
+
+    return Response.json({ ok: true, appointment: data });
+  } catch (error) {
+    console.error("[cancelación] no se pudo consultar la cita:", error);
+    return Response.json({ ok: false, error: "No pudimos consultar la cita" }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   let token: unknown;
 
@@ -11,7 +42,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "JSON inválido" }, { status: 400 });
   }
 
-  if (typeof token !== "string" || token.length < 20 || token.length > 100) {
+  if (typeof token !== "string" || !validToken(token)) {
     return Response.json({ ok: false, error: "Token de cancelación inválido" }, { status: 400 });
   }
 

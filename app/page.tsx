@@ -54,6 +54,16 @@ function describeError(err: unknown): string {
 }
 
 const STEPS = ["Fecha", "Hora", "Tus datos"];
+const CANCELLATION_TOKEN_KEY = "barbey-safety:cancellation-token";
+
+type SavedAppointment = {
+  client_name: string;
+  client_phone: string;
+  appointment_date: string;
+  appointment_time: string;
+  status: "pending" | "confirmed" | "no_show" | "cancelled";
+  cancellationToken: string;
+};
 
 export default function BookingPage() {
   // El mes que se abre es el dominicano, no el del reloj del dispositivo:
@@ -91,10 +101,29 @@ export default function BookingPage() {
     cancelled: boolean;
   } | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [savedAppointment, setSavedAppointment] = useState<SavedAppointment | null>(null);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
+
+  // Conserva la cita en este navegador para que el cliente pueda gestionarla
+  // aunque cierre y vuelva a abrir el enlace público.
+  useEffect(() => {
+    const token = window.localStorage.getItem(CANCELLATION_TOKEN_KEY);
+    if (!token) return;
+
+    fetch(`/api/cancel?token=${encodeURIComponent(token)}`)
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok || !json?.ok || json.appointment.status === "cancelled") {
+          window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
+          return;
+        }
+        setSavedAppointment({ ...json.appointment, cancellationToken: token });
+      })
+      .catch((error) => console.error("[cita] no se pudo recuperar la cita:", error));
+  }, []);
 
   /**
    * Carga citas y bloqueos del mes visible.
@@ -288,6 +317,7 @@ export default function BookingPage() {
       }
 
       const cancellationToken = json.appointment.cancellation_token as string;
+      window.localStorage.setItem(CANCELLATION_TOKEN_KEY, cancellationToken);
 
       // Confirmación por WhatsApp. La cita ya está guardada, así que un fallo
       // aquí no debe bloquear la pantalla de éxito.
@@ -401,6 +431,32 @@ export default function BookingPage() {
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No pudimos cancelar la cita");
       setDone((current) => (current ? { ...current, cancelled: true } : current));
+      setSavedAppointment(null);
+      window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
+      await loadMonth();
+    } catch (err) {
+      console.error("[cancelación] falló:", err);
+      setError(describeError(err));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const cancelSavedAppointment = async () => {
+    if (!savedAppointment || cancelling) return;
+    if (!window.confirm("¿Seguro que quieres cancelar esta cita?")) return;
+
+    setCancelling(true);
+    try {
+      const res = await fetch("/api/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: savedAppointment.cancellationToken }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No pudimos cancelar la cita");
+      setSavedAppointment(null);
+      window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
       await loadMonth();
     } catch (err) {
       console.error("[cancelación] falló:", err);
@@ -519,6 +575,24 @@ export default function BookingPage() {
           </h1>
           <p className="mt-1 text-sm text-content/60">Agenda tu cita</p>
         </header>
+
+        {savedAppointment && (
+          <section className="mb-6 rounded-2xl border border-primary/40 bg-primary/10 p-4">
+            <p className="text-sm font-semibold text-primary">Tu cita guardada</p>
+            <p className="mt-1 text-sm capitalize text-content/80">
+              {formatLongDate(savedAppointment.appointment_date)} · {formatTime(savedAppointment.appointment_time)}
+            </p>
+            <p className="mt-1 text-xs text-content/50">{savedAppointment.client_name}</p>
+            <button
+              type="button"
+              onClick={cancelSavedAppointment}
+              disabled={cancelling}
+              className="mt-4 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+            >
+              {cancelling ? "Cancelando…" : "Cancelar cita"}
+            </button>
+          </section>
+        )}
 
         {/* Indicador de pasos: círculos unidos por una línea */}
         <div className="mb-10 flex w-full items-center px-2">
