@@ -40,3 +40,9 @@ git add . && git commit -m "fix: conservar cita en el enlace" && git push origin
 ```bash
 git add . && git commit -m "fix: recuperar citas antiguas para cancelarlas" && git push origin main
 ```
+
+## Publicar cambios del panel administrativo
+
+```bash
+git add . && git commit -m "feat: sidebar contraible y rangos de citas" && git push origin main
+```

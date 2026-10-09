@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -9,6 +9,8 @@ import {
   List,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
@@ -28,7 +30,22 @@ export default function AdminLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(
+      window.localStorage.getItem("barbey-safety:sidebar-collapsed") === "true"
+    );
+  }, []);
+
+  const toggleSidebar = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("barbey-safety:sidebar-collapsed", String(next));
+      return next;
+    });
+  };
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -69,7 +86,7 @@ export default function AdminLayout({
             ].join(" ")}
           >
             <Icon className="h-4 w-4" />
-            {label}
+            {!collapsed && label}
           </Link>
         );
       })}
@@ -93,18 +110,59 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen md:flex">
       {/* Sidebar fijo — tablet (220px) y escritorio (240px) */}
-      <aside className="fixed inset-y-0 left-0 hidden w-[220px] flex-col border-r border-edge bg-surface p-5 md:flex lg:w-[240px]">
-        <div className="mb-8">{brand}</div>
+      <aside
+        className={`fixed inset-y-0 left-0 hidden flex-col border-r border-edge bg-surface p-5 transition-[width] duration-200 md:flex ${
+          collapsed ? "w-[72px]" : "w-[220px] lg:w-[240px]"
+        }`}
+      >
+        <div
+          className={`mb-8 flex ${
+            collapsed
+              ? "flex-col items-center gap-2"
+              : "items-center justify-between"
+          }`}
+        >
+          {collapsed ? (
+            <Link href="/admin" aria-label="Ir al inicio">
+              <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-edge bg-surface-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.jpeg" alt="Yoan BarberShop" className="h-10 w-10 object-contain" />
+              </span>
+            </Link>
+          ) : (
+            brand
+          )}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={collapsed ? "Mostrar barra lateral" : "Ocultar barra lateral"}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-edge text-content/50 transition hover:border-primary/40 hover:text-primary"
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        </div>
         {nav}
         <div className="mt-auto space-y-2">
-          <PushSubscribe />
+          {!collapsed && <PushSubscribe />}
           <Link
             href="/"
-            className="block rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary"
+            aria-label="Ver página del cliente"
+            className={`block rounded-xl border border-edge px-3 py-2.5 text-center text-xs text-content/50 transition hover:border-primary/40 hover:text-primary ${collapsed ? "h-10 w-10 p-0 leading-10" : ""}`}
           >
-            Ver página del cliente
+            {collapsed ? "↗" : "Ver página del cliente"}
           </Link>
-          {signOutButton}
+          {collapsed ? (
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              aria-label="Cerrar sesión"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-edge text-content/50 transition hover:border-red-500/40 hover:text-red-400 disabled:opacity-40"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            signOutButton
+          )}
         </div>
       </aside>
 
@@ -166,7 +224,11 @@ export default function AdminLayout({
         </div>
       </div>
 
-      <main className="flex-1 p-4 sm:p-6 md:ml-[220px] lg:ml-[240px] lg:p-8">
+      <main
+        className={`flex-1 p-4 transition-[margin] duration-200 sm:p-6 lg:p-8 ${
+          collapsed ? "md:ml-[72px]" : "md:ml-[220px] lg:ml-[240px]"
+        }`}
+      >
         {children}
       </main>
     </div>

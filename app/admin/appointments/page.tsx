@@ -6,7 +6,7 @@ import type { Appointment, AppointmentStatus } from "@/lib/supabase";
 // Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
 // leerlo como `supabase` hace pensar que es el cliente anónimo.
 import { supabaseAuth } from "@/lib/supabase-auth";
-import { formatShortDate, formatTime } from "@/lib/schedule";
+import { formatShortDate, formatTime, rdDateKey, rdNow } from "@/lib/schedule";
 
 type StatusFilter = "all" | AppointmentStatus;
 
@@ -23,6 +23,7 @@ const EDITABLE_STATUSES: { value: AppointmentStatus; label: string }[] = [
   { value: "pending", label: "Pendiente" },
   { value: "confirmed", label: "Asistió" },
   { value: "no_show", label: "No asistió" },
+  { value: "cancelled", label: "Cancelada" },
 ];
 
 const SELECT_STYLES: Record<AppointmentStatus, string> = {
@@ -38,8 +39,22 @@ export default function AllAppointmentsPage() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [dateFilter, setDateFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  const addDays = (dateKey: string, days: number) => {
+    const [year, month, day] = dateKey.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day + days))
+      .toISOString()
+      .slice(0, 10);
+  };
+
+  const setQuickRange = (days: number) => {
+    const today = rdDateKey(rdNow());
+    setDateFrom(today);
+    setDateTo(addDays(today, days));
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,7 +65,8 @@ export default function AllAppointmentsPage() {
       .order("appointment_date", { ascending: false })
       .order("appointment_time", { ascending: false });
 
-    if (dateFilter) query = query.eq("appointment_date", dateFilter);
+    if (dateFrom) query = query.gte("appointment_date", dateFrom);
+    if (dateTo) query = query.lte("appointment_date", dateTo);
     if (statusFilter !== "all") query = query.eq("status", statusFilter);
 
     const { data, error } = await query;
@@ -62,7 +78,7 @@ export default function AllAppointmentsPage() {
       setAppointments((data ?? []) as Appointment[]);
     }
     setLoading(false);
-  }, [dateFilter, statusFilter]);
+  }, [dateFrom, dateTo, statusFilter]);
 
   useEffect(() => {
     load();
@@ -111,7 +127,7 @@ export default function AllAppointmentsPage() {
     setUpdating(null);
   };
 
-  const hasFilters = dateFilter !== "" || statusFilter !== "all";
+  const hasFilters = dateFrom !== "" || dateTo !== "" || statusFilter !== "all";
 
   const statusSelect = (a: Appointment) => (
     <select
@@ -139,12 +155,24 @@ export default function AllAppointmentsPage() {
       </p>
 
       <div className="my-6 flex flex-wrap items-center gap-3">
-        <input
-          type="date"
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          className="min-h-[44px] w-full rounded-xl border border-edge bg-surface px-4 text-sm outline-none transition focus:border-primary sm:w-auto"
-        />
+        <label className="flex w-full flex-col gap-1 text-[11px] text-content/40 sm:w-auto">
+          Desde
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-edge bg-surface px-4 text-sm outline-none transition focus:border-primary"
+          />
+        </label>
+        <label className="flex w-full flex-col gap-1 text-[11px] text-content/40 sm:w-auto">
+          Hasta
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="min-h-[44px] rounded-xl border border-edge bg-surface px-4 text-sm outline-none transition focus:border-primary"
+          />
+        </label>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -156,10 +184,23 @@ export default function AllAppointmentsPage() {
             </option>
           ))}
         </select>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          {[7, 15, 30].map((days) => (
+            <button
+              key={days}
+              type="button"
+              onClick={() => setQuickRange(days)}
+              className="min-h-[44px] flex-1 rounded-xl border border-edge px-3 text-xs text-content/60 transition hover:border-primary/40 hover:text-primary sm:flex-none"
+            >
+              Próximos {days} días
+            </button>
+          ))}
+        </div>
         {hasFilters && (
           <button
             onClick={() => {
-              setDateFilter("");
+              setDateFrom("");
+              setDateTo("");
               setStatusFilter("all");
             }}
             className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-edge px-3 text-xs text-content/50 transition hover:border-primary/40 hover:text-primary sm:w-auto"
