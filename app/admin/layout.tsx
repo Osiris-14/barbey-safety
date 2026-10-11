@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Ban,
+  Bot,
   CalendarDays,
   ExternalLink,
   LayoutGrid,
@@ -28,6 +29,7 @@ const NAV = [
   { href: "/admin", label: "Día", icon: CalendarDays },
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/admin/appointments", label: "Todas las citas", icon: List },
+  { href: "/admin/bot", label: "Bot", icon: Bot },
   { href: "/admin/servicios", label: "Catálogo", icon: Scissors },
   { href: "/admin/link", label: "Link cliente", icon: Link2 },
   { href: "/admin/blocked", label: "Cancelar horarios", icon: Ban },
@@ -42,6 +44,17 @@ export default function AdminLayout({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  // Punto verde en el tab Bot cuando WhatsApp está conectado de verdad.
+  const [botOnline, setBotOnline] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/bot/status", { cache: "no-store" })
+      .then((res) => res.json().catch(() => null))
+      .then((json) => {
+        if (json && json.connected === true) setBotOnline(true);
+      })
+      .catch(() => {});
+  }, []);
   // Solo en escritorio/tablet: en móvil el menú es un drawer
   const [collapsed, setCollapsed] = useState(false);
 
@@ -123,6 +136,9 @@ export default function AdminLayout({
               >
                 <Icon size={20} strokeWidth={1.8} />
                 <span>{label}</span>
+                {href === "/admin/bot" && botOnline && (
+                  <i className="nav-dot" aria-label="WhatsApp conectado" />
+                )}
               </Link>
             ))}
           </nav>

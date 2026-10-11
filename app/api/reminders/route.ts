@@ -1,5 +1,6 @@
 import { type Appointment } from "@/lib/supabase";
 import { getSupabaseServer } from "@/lib/supabase-server";
+import { getBotSettings, logWaMessage } from "@/lib/bot";
 import { formatTime, rdDateKey, rdNow, rdTimeKey } from "@/lib/schedule";
 import { sendWhatsApp, wasSent } from "@/lib/whatsapp";
 
@@ -25,6 +26,12 @@ export async function GET(request: Request) {
 
   const nowRd = rdNow();
   const supabase = getSupabaseServer();
+
+  // Interruptor del panel (/admin/bot). Apagado = el cron no envía nada.
+  const { reminders } = await getBotSettings(supabase);
+  if (!reminders) {
+    return Response.json({ sent: 0, skipped: "disabled" });
+  }
 
   // Objetivo: citas que empiezan en exactamente 15 minutos.
   // Se busca entre +14 y +16 para dar 2 minutos de holgura, por si el cron
@@ -95,6 +102,13 @@ export async function GET(request: Request) {
           `[recordatorios] UltraMsg rechazó la cita ${appointment.id}:`,
           result
         );
+        await logWaMessage(supabase, {
+          phone: appointment.client_phone,
+          kind: "reminder",
+          status: "failed",
+          detail: JSON.stringify(result).slice(0, 500),
+          appointmentId: appointment.id,
+        });
         await supabase
           .from("appointments")
           .update({ reminder_claimed_at: null })
@@ -115,12 +129,26 @@ export async function GET(request: Request) {
         );
       }
 
+      await logWaMessage(supabase, {
+        phone: appointment.client_phone,
+        kind: "reminder",
+        status: "sent",
+        appointmentId: appointment.id,
+      });
+
       sent++;
     } catch (err) {
       console.error(
         `[recordatorios] error enviando la cita ${appointment.id}:`,
         err
       );
+      await logWaMessage(supabase, {
+        phone: appointment.client_phone,
+        kind: "reminder",
+        status: "failed",
+        detail: String(err).slice(0, 500),
+        appointmentId: appointment.id,
+      });
       await supabase
         .from("appointments")
         .update({ reminder_claimed_at: null })

@@ -1,4 +1,5 @@
 import { getSupabaseServer } from "@/lib/supabase-server";
+import { getBotSettings, logWaMessage } from "@/lib/bot";
 import { sendWhatsApp, wasSent } from "@/lib/whatsapp";
 
 /** Ventana en la que un teléfono puede recibir mensajes tras agendar */
@@ -62,6 +63,23 @@ export async function POST(req: Request) {
   }
 
   const appointmentId = recent[0].id as string;
+
+  // Interruptor del panel (/admin/bot). Apagado = no se envía, y se registra
+  // como omitido para que el historial lo muestre.
+  const kind = type as "confirmation" | "reminder";
+  const settings = await getBotSettings(supabase);
+  const enabled =
+    kind === "confirmation" ? settings.confirmations : settings.reminders;
+  if (!enabled) {
+    await logWaMessage(supabase, {
+      phone,
+      kind,
+      status: "skipped",
+      detail: "Pausado desde /admin/bot",
+      appointmentId,
+    });
+    return Response.json({ ok: true, skipped: "disabled" });
+  }
   const claimBefore = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   let reminderClaimed = false;
 
@@ -90,6 +108,13 @@ export async function POST(req: Request) {
 
     if (!wasSent(result)) {
       console.error("[whatsapp] UltraMsg rechazó el envío:", result);
+      await logWaMessage(supabase, {
+        phone,
+        kind,
+        status: "failed",
+        detail: JSON.stringify(result).slice(0, 500),
+        appointmentId,
+      });
       if (reminderClaimed) {
         await supabase
           .from("appointments")
@@ -109,9 +134,22 @@ export async function POST(req: Request) {
       .eq("id", appointmentId);
 
     if (flagError) console.error("[whatsapp] no se pudo marcar el mensaje:", flagError);
+    await logWaMessage(supabase, {
+      phone,
+      kind,
+      status: "sent",
+      appointmentId,
+    });
     return Response.json({ ok: true, result });
   } catch (err) {
     console.error("[whatsapp] error llamando a UltraMsg:", err);
+    await logWaMessage(supabase, {
+      phone,
+      kind,
+      status: "failed",
+      detail: String(err).slice(0, 500),
+      appointmentId,
+    });
     if (reminderClaimed) {
       await supabase
         .from("appointments")
