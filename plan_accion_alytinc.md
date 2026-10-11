@@ -51,8 +51,8 @@
 Formulario de 2 pasos dentro de la landing, con estados de carga, error y éxito. Endpoint `POST /api/leads` con validación, honeypot y límite por IP/teléfono. Tabla `leads` con RLS cerrada. **Notificación a tu correo** (`LEADS_NOTIFY_EMAIL`): cada solicitud te llega con los datos del negocio para que contactes al cliente y le hagas la inducción. Hasta que el envío al correo esté conectado, el formulario no simula un envío exitoso.
 
 ### Fase 3 — Rediseño + lo nuevo de la app
-Hecho: panel en tema claro Alytinc (base `docs/referencia/alytinc_barbershop_prototype.html`), página Link cliente (`/admin/link`, con vista previa y servicios reales), catálogo opcional.
-Pendiente: bot (FR-10 a FR-15), slug editable del link (llega con Etapa 3 / multi-negocio).
+Hecho: panel en tema claro Alytinc (base `docs/referencia/alytinc_barbershop_prototype.html`), página Link cliente (`/admin/link`, con vista previa y servicios reales), catálogo opcional, tab Bot (`/admin/bot`: estado real de UltraMsg, interruptores de confirmaciones/recordatorios que sí detienen envíos, historial real en `wa_messages`).
+Pendiente: respuestas automáticas a clientes + bandeja de conversaciones (siguiente etapa, con conexión oficial de WhatsApp); slug editable del link (llega con Etapa 3 / multi-negocio).
 Sobre la base del rediseño (Fase 0). Orden por impacto. El estado actual sale de leer README y estructura de archivos; lo marcado **(verificar)** lo confirmo leyendo el código antes de tocarlo.
 
 | ID | Requisito | Estado actual | Acción |
