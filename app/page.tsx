@@ -13,6 +13,7 @@ import {
   User,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import type { Service } from "@/lib/supabase";
 import {
   MONTH_NAMES,
   TIME_SLOTS,
@@ -32,6 +33,15 @@ import {
 } from "@/lib/schedule";
 
 type SlotMap = Record<string, string[]>; // dateKey → ["09:30", ...]
+
+/** "Corte + barba · RD$ 500 · 45 min" (precio ausente = "A convenir") */
+function serviceOptionLabel(s: Service): string {
+  const price =
+    s.price === null || Number.isNaN(Number(s.price))
+      ? "A convenir"
+      : `RD$ ${Number(s.price).toLocaleString("es-DO", { maximumFractionDigits: 2 })}`;
+  return `${s.name} · ${price} · ${s.duration_min} min`;
+}
 
 /** Arma un texto legible con lo que devuelve PostgREST (code, message, details, hint) */
 function describeError(err: unknown): string {
@@ -133,6 +143,9 @@ export default function BookingPage() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // Catálogo opcional: si viene vacío, la reserva no cambia.
+  const [services, setServices] = useState<Service[]>([]);
+  const [serviceId, setServiceId] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +154,7 @@ export default function BookingPage() {
     phone: string;
     date: string;
     time: string;
+    serviceLabel: string | null;
     cancellationToken: string;
     cancelled: boolean;
   } | null>(null);
@@ -189,6 +203,28 @@ export default function BookingPage() {
         setSavedAppointment({ ...json.appointment, cancellationToken: token });
       })
       .catch((error) => console.error("[cita] no se pudo recuperar la cita:", error));
+  }, []);
+
+  // Catálogo del negocio. Si la tabla no existe o viene vacía, se sigue
+  // sin paso extra: la reserva funciona igual que hoy.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("services")
+          .select("id, name, price, duration_min")
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true })
+          .order("name", { ascending: true });
+        if (error) {
+          console.error("[catálogo] no se pudo cargar:", error);
+          return;
+        }
+        setServices((data ?? []) as Service[]);
+      } catch (err) {
+        console.error("[catálogo] no se pudo cargar:", err);
+      }
+    })();
   }, []);
 
   /**
@@ -354,6 +390,9 @@ export default function BookingPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedTime || !nameValid || !phoneValid) return;
+    // Con catálogo activo, el servicio es obligatorio.
+    if (services.length > 0 && !serviceId) return;
+    const chosen = services.find((s) => s.id === serviceId) ?? null;
 
     setSubmitting(true);
     setError(null);
@@ -369,6 +408,7 @@ export default function BookingPage() {
           phone: fullPhone,
           date: selectedDate,
           time: selectedTime,
+          ...(chosen ? { serviceId: chosen.id } : {}),
         }),
       });
       const json = await res.json().catch(() => null);
@@ -398,7 +438,7 @@ export default function BookingPage() {
             type: "confirmation",
             message: `✂️ Hola ${name.trim()}, tu cita en *Yoan BarberShop* está confirmada para el *${formatLongDate(
               selectedDate
-            )}* a las *${formatTime(selectedTime)}*. ¡Te esperamos!`,
+            )}* a las *${formatTime(selectedTime)}*${chosen ? ` (*${chosen.name}*)` : ""}. ¡Te esperamos!`,
           }),
         });
 
@@ -471,6 +511,7 @@ export default function BookingPage() {
         phone: fullPhone,
         date: selectedDate,
         time: selectedTime,
+        serviceLabel: chosen ? serviceOptionLabel(chosen) : null,
         cancellationToken,
         cancelled: false,
       });
@@ -575,6 +616,7 @@ export default function BookingPage() {
     setSelectedTime(null);
     setName("");
     setPhone("");
+    setServiceId("");
     setError(null);
     loadMonth();
   };
@@ -618,6 +660,12 @@ export default function BookingPage() {
                 {formatTime(done.time)}
               </dd>
             </div>
+            {done.serviceLabel && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-content/50">Servicio</dt>
+                <dd className="text-right font-medium">{done.serviceLabel}</dd>
+              </div>
+            )}
           </dl>
 
           {!done.cancelled && (
@@ -951,10 +999,34 @@ export default function BookingPage() {
                 </span>
               </div>
 
+              {services.length > 0 && (
+                <>
+                  <label
+                    htmlFor="service"
+                    className="mb-1.5 block text-xs text-content/60"
+                  >
+                    Servicio
+                  </label>
+                  <select
+                    id="service"
+                    value={serviceId}
+                    onChange={(e) => setServiceId(e.target.value)}
+                    required
+                    className="mb-4 w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-primary"
+                  >
+                    <option value="">Elige un servicio…</option>
+                    {services.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {serviceOptionLabel(s)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
               <label className="mb-1.5 block text-xs text-content/60">
                 Nombre completo
-              </label>
-              <input
+              </label>              <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Juan Pérez"
@@ -996,7 +1068,12 @@ export default function BookingPage() {
 
               <button
                 type="submit"
-                disabled={!nameValid || !phoneValid || submitting}
+                disabled={
+                  !nameValid ||
+                  !phoneValid ||
+                  submitting ||
+                  (services.length > 0 && !serviceId)
+                }
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-night transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}

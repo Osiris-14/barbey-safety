@@ -12,6 +12,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Scissors,
   X,
 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/admin", label: "Inicio", icon: CalendarDays },
   { href: "/admin/appointments", label: "Todas las citas", icon: List },
+  { href: "/admin/servicios", label: "Catálogo", icon: Scissors },
   { href: "/admin/blocked", label: "Bloquear horarios", icon: Ban },
 ];
 

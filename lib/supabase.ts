@@ -46,6 +46,17 @@ export type Appointment = {
   reminder_sent: boolean;
   reminder_claimed_at: string | null;
   created_at: string;
+  // Opcional: no existe hasta correr scripts/catalogo.sql
+  service_id?: string | null;
+};
+
+export type Service = {
+  id: string;
+  name: string;
+  price: string | null; // numeric llega como texto vía PostgREST
+  duration_min: number;
+  is_active: boolean;
+  sort_order: number;
 };
 
 export type BlockedSlot = {

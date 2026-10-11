@@ -21,7 +21,7 @@ function isPastSlot(date: string, time: string, now: RdClock): boolean {
 }
 
 export async function POST(request: Request) {
-  let body: { name?: unknown; phone?: unknown; date?: unknown; time?: unknown };
+  let body: { name?: unknown; phone?: unknown; date?: unknown; time?: unknown; serviceId?: unknown };
 
   try {
     body = await request.json();
@@ -33,6 +33,8 @@ export async function POST(request: Request) {
   const phone = typeof body.phone === "string" ? body.phone.trim() : "";
   const date = typeof body.date === "string" ? body.date : "";
   const time = typeof body.time === "string" ? body.time : "";
+  // Opcional: solo llega cuando el negocio tiene catálogo activo.
+  const serviceId = typeof body.serviceId === "string" && body.serviceId ? body.serviceId : null;
 
   if (name.length < 3 || name.length > 100) {
     return Response.json({ ok: false, error: "El nombre no es válido" }, { status: 400 });
@@ -95,25 +97,73 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, error: "Ese horario acaba de ser ocupado" }, { status: 409 });
     }
 
-    const { data, error } = await supabase
-      .from("appointments")
-      .insert({
-        client_name: name,
-        client_phone: phone,
-        appointment_date: date,
-        appointment_time: `${time}:00`,
-        status: "pending",
-        cancellation_token: crypto.randomUUID(),
-      })
-      .select("id, cancellation_token")
-      .single();
-
-    if (error) {
-      // El índice único cierra la carrera entre dos clientes que reservaron a la vez.
-      if (error.code === "23505") {
-        return Response.json({ ok: false, error: "Ese horario acaba de ser ocupado" }, { status: 409 });
+    // Si mandaron servicio, tiene que existir y estar activo. Si la tabla o
+    // la columna no existen aún (falta scripts/catalogo.sql), se ignora y la
+    // cita se guarda igual que antes.
+    let serviceChecked = false;
+    if (serviceId) {
+      try {
+        const { data: svc, error: svcError } = await supabase
+          .from("services")
+          .select("id")
+          .eq("id", serviceId)
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+        if (svcError) throw svcError;
+        if (!svc) {
+          return Response.json({ ok: false, error: "El servicio elegido ya no está disponible" }, { status: 400 });
+        }
+        serviceChecked = true;
+      } catch {
+        serviceChecked = false;
       }
-      throw error;
+    }
+
+    const baseInsert = {
+      client_name: name,
+      client_phone: phone,
+      appointment_date: date,
+      appointment_time: `${time}:00`,
+      status: "pending",
+      cancellation_token: crypto.randomUUID(),
+    };
+
+    let data: { id: string; cancellation_token: string } | null = null;
+    if (serviceChecked && serviceId) {
+      const withService = await supabase
+        .from("appointments")
+        .insert({ ...baseInsert, service_id: serviceId })
+        .select("id, cancellation_token")
+        .single();
+      if (withService.error && withService.error.code === "42703") {
+        // Columna service_id inexistente: se guarda sin servicio.
+        data = null;
+      } else if (withService.error) {
+        if (withService.error.code === "23505") {
+          return Response.json({ ok: false, error: "Ese horario acaba de ser ocupado" }, { status: 409 });
+        }
+        throw withService.error;
+      } else {
+        data = withService.data;
+      }
+    }
+
+    if (!data) {
+      const { data: inserted, error } = await supabase
+        .from("appointments")
+        .insert(baseInsert)
+        .select("id, cancellation_token")
+        .single();
+
+      if (error) {
+        // El índice único cierra la carrera entre dos clientes que reservaron a la vez.
+        if (error.code === "23505") {
+          return Response.json({ ok: false, error: "Ese horario acaba de ser ocupado" }, { status: 409 });
+        }
+        throw error;
+      }
+      data = inserted;
     }
 
     return Response.json({ ok: true, appointment: data });

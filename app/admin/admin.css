@@ -164,6 +164,7 @@
 .admin-app .form-field input:focus { border-color: rgba(212,173,82,.5); box-shadow: 0 0 0 3px var(--gold-soft); }
 .admin-app .block-form-card .primary-button { margin-top: 7px; }
 .admin-app .form-hint { margin: 13px 0 0; color: #686c66; font-size: 11px; line-height: 1.5; text-align: center; }
+.admin-app .form-field .form-optional { font-style: normal; font-weight: 400; color: var(--muted); }
 .admin-app .block-list { display: grid; gap: 10px; }
 .admin-app .block-row { min-height: 76px; padding: 14px; display: grid; grid-template-columns: 42px 1fr auto 40px; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
 .admin-app .block-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: var(--gold); background: var(--gold-soft); }
@@ -308,6 +309,7 @@
 .admin-app .alert { margin: 0 0 18px; padding: 11px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .admin-app .alert-error { color: #f0b4b4; background: var(--red-soft); border: 1px solid rgba(228,120,120,.3); }
 .admin-app .alert-warn { color: #e9cf8e; background: var(--gold-soft); border: 1px solid rgba(212,173,82,.3); }
+.admin-app .alert-success { color: #9fd29d; background: var(--green-soft); border: 1px solid rgba(120,200,140,.3); }
 
 .admin-app .loading-state { min-height: 220px; display: grid; place-items: center; color: var(--muted); }
 .admin-app .header-actions { display: flex; align-items: center; gap: 8px; }
