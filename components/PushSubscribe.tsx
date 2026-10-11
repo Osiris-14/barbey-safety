@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellRing, Download, Loader2 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
 
 /**
@@ -135,20 +134,14 @@ export default function PushSubscribe() {
   // PushManager, y sin este orden nunca se verían los pasos de instalación.
   if (isIos && !isStandalone) {
     return (
-      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-300">
-        <p className="mb-1 flex items-center gap-1.5 font-medium">
-          <Download className="h-3.5 w-3.5" />
-          Para recibir notificaciones en tu iPhone:
-        </p>
-        <ol className="list-inside list-decimal space-y-1 text-amber-200/80">
+      <div className="push-help">
+        <p>Para recibir notificaciones en tu iPhone:</p>
+        <ol>
           <li>
-            Toca <b>Compartir</b>{" "}
-            <span className="text-amber-300">⬆</span> en Safari.
+            Toca <b>Compartir</b> ⬆ en Safari.
           </li>
           <li>Pulsa “Agregar a pantalla de inicio”.</li>
-          <li>
-            Abre la app desde su ícono y vuelve a pulsar este botón.
-          </li>
+          <li>Abre la app desde su ícono y vuelve a pulsar este botón.</li>
         </ol>
       </div>
     );
@@ -156,38 +149,39 @@ export default function PushSubscribe() {
 
   if (!supported) {
     return (
-      <p className="text-xs text-content/40">
+      <p className="push-error" style={{ color: "var(--muted)" }}>
         Tu navegador no soporta notificaciones.
       </p>
     );
   }
 
+  // Estilos en app/admin/admin.css (.notification): solo se usa en el panel
+  if (enabled) {
+    return (
+      <div className="notification">
+        <span className="status-dot" />
+        <div>
+          <strong>Notificaciones activas</strong>
+          <small>Te avisamos cuando alguien agenda</small>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-1.5">
+    <>
       <button
         onClick={enable}
-        disabled={busy || enabled}
-        className={[
-          "flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 text-xs font-medium transition disabled:opacity-40",
-          enabled
-            ? "border-[#4CAF50]/40 bg-[#4CAF50]/10 text-[#4CAF50]"
-            : "border-edge bg-surface-2 text-content/70 hover:border-primary/40 hover:text-primary",
-        ].join(" ")}
+        disabled={busy}
+        className="notification notification-button off"
       >
-        {busy ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : enabled ? (
-          <BellRing className="h-3.5 w-3.5" />
-        ) : (
-          <Bell className="h-3.5 w-3.5" />
-        )}
-        {busy
-          ? "Activando…"
-          : enabled
-            ? "Notificaciones activadas"
-            : "Activar notificaciones"}
+        <span className="status-dot" />
+        <div>
+          <strong>{busy ? "Activando…" : "Activar notificaciones"}</strong>
+          <small>Recibe un aviso con cada cita nueva</small>
+        </div>
       </button>
-      {error && <p className="text-xs text-red-400">{error}</p>}
-    </div>
+      {error && <p className="push-error">{error}</p>}
+    </>
   );
 }

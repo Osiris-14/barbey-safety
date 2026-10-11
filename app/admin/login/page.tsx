@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { supabaseAuth } from "@/lib/supabase-auth";
+import { adminFonts } from "../fonts";
+import "../admin.css";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -40,81 +42,58 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center px-4 py-10">
+    <main className={`admin-app login-screen ${adminFonts}`}>
       {/* Fondo a pantalla completa */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/fondo.jpg"
-        alt=""
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      <div
-        className="absolute inset-0"
-        style={{ backgroundColor: "rgba(0,0,0,0.65)" }}
-      />
+      <img src="/fondo.jpg" alt="" aria-hidden="true" className="login-bg" />
+      <div className="login-overlay" />
 
-      <div
-        className="relative w-full"
-        style={{
-          maxWidth: 380,
-          backgroundColor: "#111111",
-          border: "1px solid rgba(201,168,76,0.3)",
-          borderRadius: 16,
-          padding: 32,
-        }}
-      >
-        <div className="text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo.jpeg"
-            alt="Yoan BarberShop"
-            className="mx-auto rounded-xl"
-            style={{ width: 80, height: 80, objectFit: "contain" }}
-          />
-          <p className="mt-4 text-sm font-medium text-primary">
-            Panel del barbero
-          </p>
+      <div className="login-card">
+        <div className="brand">
+          <span className="logo has-img">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.jpeg" alt="Yoan BarberShop" />
+          </span>
+          <div>
+            <strong>Yoan BarberShop</strong>
+            <span>Panel del barbero</span>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8">
-          <label className="mb-1.5 block text-xs text-content/60">Correo</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="barbero@correo.com"
-            autoComplete="email"
-            required
-            className="mb-4 w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition placeholder:text-content/25 focus:border-primary"
-          />
-
-          <label className="mb-1.5 block text-xs text-content/60">
-            Contraseña
+        <form onSubmit={handleSubmit}>
+          <label className="form-field">
+            <span>Correo</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="barbero@correo.com"
+              autoComplete="email"
+              required
+            />
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            autoComplete="current-password"
-            required
-            className="mb-5 w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition placeholder:text-content/25 focus:border-primary"
-          />
 
-          {error && (
-            <p className="mb-4 break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-              {error}
-            </p>
-          )}
+          <label className="form-field">
+            <span>Contraseña</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              required
+            />
+          </label>
+
+          {error && <p className="alert alert-error">{error}</p>}
 
           <button
             type="submit"
             disabled={submitting || !email || !password}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
-            style={{ backgroundColor: "#C9A84C", color: "#111111" }}
+            className="primary-button full"
+            style={{ marginTop: 6 }}
           >
-            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {submitting && <Loader2 className="animate-spin" size={16} />}
             {submitting ? "Entrando…" : "Entrar"}
           </button>
         </form>

@@ -1,46 +1,56 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Phone, RefreshCw, X } from "lucide-react";
+import Link from "next/link";
+import {
+  CalendarDays,
+  Check,
+  Loader2,
+  Plus,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/supabase";
 // Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
 // leerlo como `supabase` hace pensar que es el cliente anónimo.
 import { supabaseAuth } from "@/lib/supabase-auth";
-import { formatLongDate, formatTime, rdDateKey, rdNow } from "@/lib/schedule";
+import {
+  formatLongDate,
+  formatTime,
+  minutesUntil,
+} from "@/lib/schedule";
+import {
+  PageHeader,
+  capitalize,
+  initials,
+  rdTodayKey,
+  updateAppointmentStatus,
+  waLink,
+} from "./_components/admin-ui";
 
-const POLL_MS = 30_000;
+// Cada 15 s, y además al volver a la pestaña: así una cancelación del
+// cliente aparece sola sin que el barbero tenga que recargar
+const POLL_MS = 15_000;
 
-/** Color de la card según el estado de la cita */
-const CARD_STYLES: Record<AppointmentStatus, string> = {
-  pending: "bg-[#1C1C1C] border-[#2E2E2E]",
-  confirmed: "bg-[#1A2E1A] border-[#4CAF50]",
-  no_show: "bg-[#2E1A1A] border-[#EF5350]",
-  cancelled: "bg-[#252525] border-[#777]",
+/** Etiqueta bajo la hora: cómo terminó (o va) cada cita */
+const TAG_LABEL: Record<AppointmentStatus, string> = {
+  pending: "Pendiente",
+  confirmed: "Asistió",
+  no_show: "No asistió",
+  cancelled: "Canceló",
 };
 
-/** Badge de estado, arriba a la derecha de cada card */
-const BADGE_STYLES: Record<AppointmentStatus, { label: string; className: string }> =
-  {
-    pending: {
-      label: "Pendiente",
-      className: "border-edge text-content/50",
-    },
-    confirmed: {
-      label: "Asistió",
-      className: "border-[#4CAF50]/50 bg-[#4CAF50]/10 text-[#4CAF50]",
-    },
-    no_show: {
-      label: "No asistió",
-      className: "border-[#EF5350]/50 bg-[#EF5350]/10 text-[#EF5350]",
-    },
-    cancelled: {
-      label: "Cancelada",
-      className: "border-content/20 bg-content/5 text-content/50",
-    },
-  };
+/** 35 → "En 35 min", 130 → "En 2 h 10 min", -5 → "Hace 5 min" */
+function relativeLabel(minutes: number): string {
+  const abs = Math.round(Math.abs(minutes));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const text = h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+  return minutes >= 0 ? `En ${text}` : `Hace ${text}`;
+}
 
 export default function AdminTodayPage() {
-  const todayKey = useMemo(() => rdDateKey(rdNow()), []);
+  const todayKey = useMemo(() => rdTodayKey(), []);
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,8 +77,17 @@ export default function AdminTodayPage() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, POLL_MS); // refresca para ver citas nuevas
-    return () => clearInterval(id);
+    const id = setInterval(load, POLL_MS); // citas nuevas y cancelaciones
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [load]);
 
   /**
@@ -87,7 +106,7 @@ export default function AdminTodayPage() {
     });
   }, []);
 
-  /** Pinta la card al instante y revierte si Supabase rechaza el UPDATE */
+  /** Pinta la fila al instante y revierte si Supabase rechaza el UPDATE */
   const setStatus = async (id: string, status: AppointmentStatus) => {
     const previous = appointments;
 
@@ -97,194 +116,173 @@ export default function AdminTodayPage() {
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
 
-    // .select() es lo que delata un rechazo silencioso: si una política de RLS
-    // filtra la fila, el UPDATE afecta 0 filas y Postgres no devuelve error.
-    const { data, error } = await supabaseAuth
-      .from("appointments")
-      .update({ status })
-      .eq("id", id)
-      .select();
-
-    if (error) {
-      console.error("[citas] no se pudo actualizar el estado:", error, {
-        id,
-        status,
-      });
+    const message = await updateAppointmentStatus(id, status);
+    if (message) {
       setAppointments(previous);
-      setError(
-        `No pudimos actualizar el estado. ${error.message}${
-          error.code ? ` (${error.code})` : ""
-        }`
-      );
-    } else if (!data || data.length === 0) {
-      console.error("[citas] el UPDATE no afectó ninguna fila:", { id, status });
-      setAppointments(previous);
-      setError(
-        "El cambio no se guardó: la base rechazó la fila. Cierra sesión y vuelve a entrar."
-      );
+      setError(message);
     }
 
     setUpdating(null);
   };
 
+  // Una cita cancelada igual se agendó: cuenta en el total y se informa aparte
   const total = appointments.length;
+  const cancelled = appointments.filter((a) => a.status === "cancelled").length;
+  const pending = appointments.filter((a) => a.status === "pending").length;
   const confirmed = appointments.filter((a) => a.status === "confirmed").length;
   const noShow = appointments.filter((a) => a.status === "no_show").length;
+  const next = appointments.find((a) => a.status === "pending");
+  const nextIndex = next ? appointments.indexOf(next) : -1;
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold sm:text-2xl">Citas de hoy</h1>
-          <p className="mt-1 text-sm capitalize text-content/50">
-            {formatLongDate(todayKey)}
-          </p>
-        </div>
-        <button
-          onClick={load}
-          className="flex min-h-[44px] items-center gap-2 rounded-xl border border-edge bg-surface px-3 text-xs text-content/60 transition hover:border-primary/40 hover:text-primary"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Actualizar
-        </button>
-      </div>
+    <>
+      <PageHeader
+        title="Agenda de hoy"
+        eyebrow={capitalize(formatLongDate(todayKey))}
+        action={
+          <div className="header-actions">
+            <button
+              className="icon-button"
+              onClick={load}
+              aria-label="Actualizar citas"
+              title="Actualizar"
+            >
+              <RefreshCw size={18} strokeWidth={1.8} />
+            </button>
+            <Link href="/" className="primary-button">
+              <Plus size={18} strokeWidth={1.8} /> Nueva cita
+            </Link>
+          </div>
+        }
+      />
 
       {signedIn === false && (
-        <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+        <p className="alert alert-warn">
           No hay sesión activa en este navegador. Puedes ver las citas, pero
           confirmar o marcar ausencias será rechazado. Cierra sesión y vuelve a
           entrar.
         </p>
       )}
 
-      {/* Siempre 3 columnas, en cualquier tamaño de pantalla */}
-      <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-3">
-        <Metric label="Citas de hoy" value={total} />
-        <Metric label="Asistieron" value={confirmed} accent="text-[#4CAF50]" />
-        <Metric label="No asistieron" value={noShow} accent="text-[#EF5350]" />
+      <section className="summary-grid">
+        <article className="summary-card featured">
+          <p>Próxima cita</p>
+          <strong>
+            {next ? formatTime(next.appointment_time) : "Sin pendientes"}
+          </strong>
+          <span>
+            {next
+              ? `${relativeLabel(
+                  minutesUntil(next.appointment_date, next.appointment_time)
+                )} · ${next.client_name}`
+              : "Tu agenda está al día"}
+          </span>
+        </article>
+        <article className="summary-card">
+          <div className="summary-icon gold">
+            <CalendarDays size={20} strokeWidth={1.8} />
+          </div>
+          <div>
+            <p>Citas de hoy</p>
+            <strong>{total}</strong>
+            <span>
+              {pending} por atender · {cancelled}{" "}
+              {cancelled === 1 ? "cancelada" : "canceladas"}
+            </span>
+          </div>
+        </article>
+        <article className="summary-card">
+          <div className="summary-icon green">
+            <Check size={20} strokeWidth={1.8} />
+          </div>
+          <div>
+            <p>Asistieron</p>
+            <strong>{confirmed}</strong>
+            <span>{noShow} no asistieron</span>
+          </div>
+        </article>
+      </section>
+
+      {error && <p className="alert alert-error">{error}</p>}
+
+      <div className="section-heading">
+        <div>
+          <h2>Citas del día</h2>
+          <p>Marca la asistencia a medida que avanza el día.</p>
+        </div>
+        <span className="live-label">
+          <i /> EN VIVO
+        </span>
       </div>
 
-      {error && (
-        <p className="mb-4 break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {error}
-        </p>
-      )}
-
-      {loading ? (
-        <div className="flex h-48 items-center justify-center text-content/40">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-      ) : appointments.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-edge py-16 text-center text-sm text-content/40">
-          No hay citas para hoy.
-        </div>
-      ) : (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-          {appointments.map((a) => {
-            const badge = BADGE_STYLES[a.status] ?? BADGE_STYLES.pending;
-            return (
-              <li
-                key={a.id}
-                className={`flex min-h-[200px] flex-col rounded-2xl border p-4 transition-colors duration-300 ${
-                  CARD_STYLES[a.status] ?? CARD_STYLES.pending
-                }`}
-              >
-                {/* Hora a la izquierda, estado a la derecha */}
-                <div className="flex items-start justify-between gap-2">
-                  <span className="whitespace-nowrap rounded-lg bg-primary/15 px-2.5 py-1 text-sm font-semibold text-primary">
-                    {formatTime(a.appointment_time)}
-                  </span>
-                  <span
-                    className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${badge.className}`}
-                  >
-                    {badge.label}
-                  </span>
-                </div>
-
-                {/* Datos del cliente */}
-                <div className="mt-4 min-w-0 flex-1">
-                  <p className="truncate font-medium">{a.client_name}</p>
+      <section className="timeline">
+        {loading ? (
+          <div className="loading-state">
+            <Loader2 className="animate-spin" size={22} />
+          </div>
+        ) : appointments.length === 0 ? (
+          <div className="empty-state">
+            <CalendarDays size={28} strokeWidth={1.8} />
+            <strong>No hay citas para hoy</strong>
+            <span>Las reservas nuevas aparecerán aquí automáticamente.</span>
+          </div>
+        ) : (
+          appointments.map((a, index) => (
+            <article
+              key={a.id}
+              className={`appointment-row ${
+                a.status === "no_show" ? "muted" : a.status === "cancelled" ? "cancelled" : ""
+              }`}
+            >
+              <div className="time-column">
+                <strong>{formatTime(a.appointment_time)}</strong>
+                <span
+                  className={`time-tag tag-${
+                    index === nextIndex ? "next" : a.status
+                  }`}
+                >
+                  {index === nextIndex ? "Próxima" : TAG_LABEL[a.status]}
+                </span>
+              </div>
+              <div className="timeline-line">
+                <i />
+              </div>
+              <div className="client-avatar">{initials(a.client_name)}</div>
+              <div className="client-info">
+                <strong>{a.client_name}</strong>
+                <span>
                   <a
-                    href={`https://wa.me/${a.client_phone.replace(/\D/g, "")}`}
+                    href={waLink(a.client_phone)}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-1 flex items-center gap-1.5 text-xs text-content/50 transition hover:text-primary"
+                    className="phone-link"
                   >
-                    <Phone className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{a.client_phone}</span>
+                    {a.client_phone}
                   </a>
-                </div>
-
-                {/* Acciones o resultado */}
-                {a.status === "pending" ? (
-                  <div className="mt-4 flex items-center gap-2">
-                    <button
-                      onClick={() => setStatus(a.id, "confirmed")}
-                      disabled={updating === a.id}
-                      className="flex h-11 flex-1 items-center justify-center gap-1 rounded-lg border border-[#4CAF50]/50 bg-[#4CAF50]/10 px-2 text-xs font-medium text-[#4CAF50] transition hover:bg-[#4CAF50]/20 disabled:opacity-40"
-                    >
-                      <Check className="h-4 w-4 shrink-0" />
-                      Asistió
-                    </button>
-                    <button
-                      onClick={() => setStatus(a.id, "no_show")}
-                      disabled={updating === a.id}
-                      className="flex h-11 flex-1 items-center justify-center gap-1 rounded-lg border border-[#EF5350]/50 bg-[#EF5350]/10 px-2 text-xs font-medium text-[#EF5350] transition hover:bg-[#EF5350]/20 disabled:opacity-40"
-                    >
-                      <X className="h-4 w-4 shrink-0" />
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <p
-                    className={`mt-4 flex items-center gap-1.5 text-sm font-medium ${
-                      a.status === "confirmed"
-                        ? "text-[#4CAF50]"
-                        : "text-[#EF5350]"
-                    }`}
+                </span>
+              </div>
+              {a.status === "pending" && (
+                <div className="row-actions">
+                  <button
+                    className="success-button"
+                    onClick={() => setStatus(a.id, "confirmed")}
+                    disabled={updating === a.id}
                   >
-                    {a.status === "confirmed" ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Confirmado
-                      </>
-                    ) : a.status === "cancelled" ? (
-                      <>
-                        <X className="h-4 w-4" />
-                        Cancelada
-                      </>
-                    ) : (
-                      <>
-                        <X className="h-4 w-4" />
-                        No asistió
-                      </>
-                    )}
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  accent = "text-content",
-}: {
-  label: string;
-  value: number;
-  accent?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-edge bg-surface p-3 sm:p-4">
-      <p className="text-[11px] text-content/50 sm:text-xs">{label}</p>
-      <p className={`mt-1 text-xl font-semibold sm:text-2xl ${accent}`}>
-        {value}
-      </p>
-    </div>
+                    <Check size={17} strokeWidth={1.8} /> Asistió
+                  </button>
+                  <button
+                    className="danger-button"
+                    onClick={() => setStatus(a.id, "no_show")}
+                    disabled={updating === a.id}
+                  >
+                    <X size={17} strokeWidth={1.8} /> No asistió
+                  </button>
+                </div>
+              )}
+            </article>
+          ))
+        )}
+      </section>
+    </>
   );
 }

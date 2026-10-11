@@ -57,6 +57,49 @@ const STEPS = ["Fecha", "Hora", "Tus datos"];
 const CANCELLATION_TOKEN_KEY = "barbey-safety:cancellation-token";
 const CANCELLATION_QUERY_KEY = "cita";
 
+/**
+ * localStorage puede lanzar una excepción (Safari con "Bloquear todas las
+ * cookies", navegadores internos de algunas apps, modo privado antiguo).
+ * Sin este envoltorio ese error tumbaba la página entera con
+ * "Application error". Guardar el token es una comodidad: si falla, se sigue.
+ */
+const tokenStorage = {
+  get(): string | null {
+    try {
+      return window.localStorage.getItem(CANCELLATION_TOKEN_KEY);
+    } catch (err) {
+      console.warn("[cita] almacenamiento no disponible:", err);
+      return null;
+    }
+  },
+  set(token: string) {
+    try {
+      window.localStorage.setItem(CANCELLATION_TOKEN_KEY, token);
+    } catch (err) {
+      console.warn("[cita] no se pudo guardar el token:", err);
+    }
+  },
+  remove() {
+    try {
+      window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
+    } catch (err) {
+      console.warn("[cita] no se pudo borrar el token:", err);
+    }
+  },
+};
+
+/** Cambia ?cita= en la barra de direcciones sin recargar; nunca debe romper */
+function setTokenInUrl(token: string | null) {
+  try {
+    const url = new URL(window.location.href);
+    if (token) url.searchParams.set(CANCELLATION_QUERY_KEY, token);
+    else url.searchParams.delete(CANCELLATION_QUERY_KEY);
+    window.history.replaceState(null, "", url.toString());
+  } catch (err) {
+    console.warn("[cita] no se pudo actualizar la URL:", err);
+  }
+}
+
 type SavedAppointment = {
   client_name: string;
   client_phone: string;
@@ -116,20 +159,31 @@ export default function BookingPage() {
   // Conserva la cita en este navegador para que el cliente pueda gestionarla
   // aunque cierre y vuelva a abrir el enlace público.
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const tokenFromUrl = url.searchParams.get(CANCELLATION_QUERY_KEY);
-    const token = tokenFromUrl || window.localStorage.getItem(CANCELLATION_TOKEN_KEY);
+    let tokenFromUrl: string | null = null;
+    try {
+      tokenFromUrl = new URL(window.location.href).searchParams.get(
+        CANCELLATION_QUERY_KEY
+      );
+    } catch {
+      // URL rara: se sigue sin token
+    }
+    const token = tokenFromUrl || tokenStorage.get();
     if (!token) return;
 
-    window.localStorage.setItem(CANCELLATION_TOKEN_KEY, token);
+    tokenStorage.set(token);
 
     fetch(`/api/cancel?token=${encodeURIComponent(token)}`)
       .then(async (res) => {
-        const json = await res.json();
-        if (!res.ok || !json?.ok || json.appointment.status === "cancelled") {
-          window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
-          url.searchParams.delete(CANCELLATION_QUERY_KEY);
-          window.history.replaceState(null, "", url.toString());
+        const json = await res.json().catch(() => null);
+        if (
+          !res.ok ||
+          !json?.ok ||
+          !json.appointment ||
+          // Solo se muestran citas que todavía se pueden cancelar
+          !["pending", "confirmed"].includes(json.appointment.status)
+        ) {
+          tokenStorage.remove();
+          setTokenInUrl(null);
           return;
         }
         setSavedAppointment({ ...json.appointment, cancellationToken: token });
@@ -317,7 +371,7 @@ export default function BookingPage() {
           time: selectedTime,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
 
       if (!res.ok || !json?.ok || !json.appointment?.cancellation_token) {
         if (res.status === 409) {
@@ -329,10 +383,8 @@ export default function BookingPage() {
       }
 
       const cancellationToken = json.appointment.cancellation_token as string;
-      window.localStorage.setItem(CANCELLATION_TOKEN_KEY, cancellationToken);
-      const appointmentUrl = new URL(window.location.href);
-      appointmentUrl.searchParams.set(CANCELLATION_QUERY_KEY, cancellationToken);
-      window.history.replaceState(null, "", appointmentUrl.toString());
+      tokenStorage.set(cancellationToken);
+      setTokenInUrl(cancellationToken);
 
       // Confirmación por WhatsApp. La cita ya está guardada, así que un fallo
       // aquí no debe bloquear la pantalla de éxito.
@@ -443,14 +495,12 @@ export default function BookingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: done.cancellationToken }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No pudimos cancelar la cita");
       setDone((current) => (current ? { ...current, cancelled: true } : current));
       setSavedAppointment(null);
-      window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
-      const url = new URL(window.location.href);
-      url.searchParams.delete(CANCELLATION_QUERY_KEY);
-      window.history.replaceState(null, "", url.toString());
+      tokenStorage.remove();
+      setTokenInUrl(null);
       await loadMonth();
     } catch (err) {
       console.error("[cancelación] falló:", err);
@@ -471,13 +521,11 @@ export default function BookingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: savedAppointment.cancellationToken }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No pudimos cancelar la cita");
       setSavedAppointment(null);
-      window.localStorage.removeItem(CANCELLATION_TOKEN_KEY);
-      const url = new URL(window.location.href);
-      url.searchParams.delete(CANCELLATION_QUERY_KEY);
-      window.history.replaceState(null, "", url.toString());
+      tokenStorage.remove();
+      setTokenInUrl(null);
       await loadMonth();
     } catch (err) {
       console.error("[cancelación] falló:", err);
@@ -503,15 +551,13 @@ export default function BookingPage() {
           time: lookupTime,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) throw new Error(json?.error ?? "No encontramos la cita");
 
       const appointment = json.appointment;
       const token = appointment.cancellation_token as string;
-      window.localStorage.setItem(CANCELLATION_TOKEN_KEY, token);
-      const url = new URL(window.location.href);
-      url.searchParams.set(CANCELLATION_QUERY_KEY, token);
-      window.history.replaceState(null, "", url.toString());
+      tokenStorage.set(token);
+      setTokenInUrl(token);
       setSavedAppointment({ ...appointment, cancellationToken: token });
       setShowLookup(false);
     } catch (err) {

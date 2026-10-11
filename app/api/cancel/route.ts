@@ -65,13 +65,26 @@ export async function POST(request: Request) {
       return Response.json({ ok: false, error: "Esta cita ya fue cerrada" }, { status: 409 });
     }
 
-    const { error } = await supabase
+    // .select() delata un UPDATE que no tocó ninguna fila: sin él la API
+    // respondía "cancelada" aunque la cita siguiera pendiente en la base.
+    const { data: updated, error } = await supabase
       .from("appointments")
       .update({ status: "cancelled" })
       .eq("id", appointment.id)
-      .in("status", ["pending", "confirmed"]);
+      .in("status", ["pending", "confirmed"])
+      .select("id, status");
 
     if (error) throw error;
+    if (!updated || updated.length === 0 || updated[0].status !== "cancelled") {
+      console.error("[cancelación] el UPDATE no cambió la cita:", {
+        id: appointment.id,
+        updated,
+      });
+      return Response.json(
+        { ok: false, error: "No pudimos cancelar la cita. Inténtalo de nuevo." },
+        { status: 500 }
+      );
+    }
     return Response.json({ ok: true });
   } catch (error) {
     console.error("[cancelación] no se pudo cancelar la cita:", error);

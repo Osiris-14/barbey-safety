@@ -1,92 +1,110 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  CalendarDays,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Search,
+} from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/supabase";
 // Bajo RLS el panel debe actuar como `authenticated`. Sin alias, a propósito:
 // leerlo como `supabase` hace pensar que es el cliente anónimo.
 import { supabaseAuth } from "@/lib/supabase-auth";
-import { formatShortDate, formatTime, rdDateKey, rdNow } from "@/lib/schedule";
+import { formatTime } from "@/lib/schedule";
+import {
+  PageHeader,
+  STATUSES,
+  STATUS_LABEL,
+  StatusPill,
+  initials,
+  rdTodayKey,
+  updateAppointmentStatus,
+  waLink,
+} from "../_components/admin-ui";
 
 type StatusFilter = "all" | AppointmentStatus;
+type QuickRange = 7 | 15 | 30;
 
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "Todos los estados" },
-  { value: "pending", label: "Pendiente" },
-  { value: "confirmed", label: "Asistió" },
-  { value: "no_show", label: "No asistió" },
-  { value: "cancelled", label: "Cancelada" },
+const FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "Todas" },
+  ...STATUSES.map((value) => ({ value, label: STATUS_LABEL[value] })),
 ];
 
-/** Estados editables, sin la opción "todos" del filtro */
-const EDITABLE_STATUSES: { value: AppointmentStatus; label: string }[] = [
-  { value: "pending", label: "Pendiente" },
-  { value: "confirmed", label: "Asistió" },
-  { value: "no_show", label: "No asistió" },
-  { value: "cancelled", label: "Cancelada" },
-];
+function keyToDate(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
 
-const SELECT_STYLES: Record<AppointmentStatus, string> = {
-  pending: "border-edge bg-surface-2 text-content/70",
-  confirmed: "border-[#4CAF50]/50 bg-[#4CAF50]/10 text-[#4CAF50]",
-  no_show: "border-[#EF5350]/50 bg-[#EF5350]/10 text-[#EF5350]",
-  cancelled: "border-content/20 bg-content/5 text-content/50",
-};
+/** "2026-10-09" → "9 oct" */
+function shortDay(key: string): string {
+  return keyToDate(key).toLocaleDateString("es-DO", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/** Etiqueta de la cajita dorada: Hoy / Mañana / Ayer / día de la semana */
+function dayTag(key: string, todayKey: string): string {
+  const diff = Math.round(
+    (keyToDate(key).getTime() - keyToDate(todayKey).getTime()) / 86_400_000
+  );
+  if (diff === 0) return "Hoy";
+  if (diff === 1) return "Mañana";
+  if (diff === -1) return "Ayer";
+  return keyToDate(key)
+    .toLocaleDateString("es-DO", { weekday: "short" })
+    .replace(".", "");
+}
 
 export default function AllAppointmentsPage() {
+  const todayKey = useMemo(() => rdTodayKey(), []);
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [range, setRange] = useState({ start: "", end: "" });
+  const [quickRange, setQuickRange] = useState<QuickRange | null>(null);
 
-  const addDays = (dateKey: string, days: number) => {
-    const [year, month, day] = dateKey.split("-").map(Number);
-    return new Date(Date.UTC(year, month - 1, day + days))
-      .toISOString()
-      .slice(0, 10);
-  };
-
-  const setQuickRange = (days: number) => {
-    const today = rdDateKey(rdNow());
-    setDateFrom(today);
-    setDateTo(addDays(today, days));
-  };
-
+  // El rango de fechas filtra en la base; nombre y estado, en el navegador
   const load = useCallback(async () => {
     setLoading(true);
 
-    let query = supabaseAuth
+    let request = supabaseAuth
       .from("appointments")
       .select("*")
       .order("appointment_date", { ascending: false })
       .order("appointment_time", { ascending: false });
 
-    if (dateFrom) query = query.gte("appointment_date", dateFrom);
-    if (dateTo) query = query.lte("appointment_date", dateTo);
-    if (statusFilter !== "all") query = query.eq("status", statusFilter);
+    if (range.start) request = request.gte("appointment_date", range.start);
+    if (range.end) request = request.lte("appointment_date", range.end);
 
-    const { data, error } = await query;
+    const { data, error } = await request;
 
     if (error) {
+      console.error("[citas] no se pudieron cargar las citas:", error);
       setError("No pudimos cargar las citas.");
     } else {
       setError(null);
       setAppointments((data ?? []) as Appointment[]);
     }
     setLoading(false);
-  }, [dateFrom, dateTo, statusFilter]);
+  }, [range]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   /**
-   * Corrige el estado de una cita ya pasada. Mismo criterio que /admin:
-   * se pinta al instante y se revierte si la base lo rechaza.
+   * Corrige el estado de una cita. Mismo criterio que /admin: se pinta al
+   * instante y se revierte si la base lo rechaza.
    */
   const setStatus = async (id: string, status: AppointmentStatus) => {
     const previous = appointments;
@@ -97,215 +115,228 @@ export default function AllAppointmentsPage() {
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
 
-    // .select() delata el rechazo silencioso: si una política de RLS filtra
-    // la fila, el UPDATE afecta 0 filas y Postgres no devuelve error.
-    const { data, error } = await supabaseAuth
-      .from("appointments")
-      .update({ status })
-      .eq("id", id)
-      .select();
-
-    if (error) {
-      console.error("[citas] no se pudo cambiar el estado:", error, {
-        id,
-        status,
-      });
+    const message = await updateAppointmentStatus(id, status);
+    if (message) {
       setAppointments(previous);
-      setError(
-        `No pudimos cambiar el estado. ${error.message}${
-          error.code ? ` (${error.code})` : ""
-        }`
-      );
-    } else if (!data || data.length === 0) {
-      console.error("[citas] el UPDATE no afectó ninguna fila:", { id, status });
-      setAppointments(previous);
-      setError(
-        "El cambio no se guardó: la base rechazó la fila. Cierra sesión y vuelve a entrar."
-      );
+      setError(message);
     }
 
     setUpdating(null);
   };
 
-  const hasFilters = dateFrom !== "" || dateTo !== "" || statusFilter !== "all";
+  /** Próximos N días a partir de hoy (hora RD) */
+  const selectQuickRange = (days: QuickRange) => {
+    const [y, m, d] = todayKey.split("-").map(Number);
+    const end = new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+    setRange({ start: todayKey, end });
+    setQuickRange(days);
+  };
 
-  const statusSelect = (a: Appointment) => (
-    <select
-      value={a.status}
-      onChange={(e) => setStatus(a.id, e.target.value as AppointmentStatus)}
-      disabled={updating === a.id}
-      aria-label={`Estado de la cita de ${a.client_name}`}
-      className={`min-h-[36px] cursor-pointer rounded-full border px-3 text-xs font-medium outline-none transition focus:border-primary disabled:opacity-50 ${
-        SELECT_STYLES[a.status] ?? SELECT_STYLES.pending
-      }`}
-    >
-      {EDITABLE_STATUSES.map((o) => (
-        <option key={o.value} value={o.value} className="bg-surface text-content">
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
+  const rangeActive = Boolean(range.start || range.end);
+  const rangeLabel =
+    range.start && range.end
+      ? `${shortDay(range.start)} – ${shortDay(range.end)}`
+      : range.start
+        ? `Desde ${shortDay(range.start)}`
+        : range.end
+          ? `Hasta ${shortDay(range.end)}`
+          : "Rango de fecha";
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return appointments.filter(
+      (a) =>
+        (statusFilter === "all" || a.status === statusFilter) &&
+        (!q || `${a.client_name} ${a.client_phone}`.toLowerCase().includes(q))
+    );
+  }, [appointments, query, statusFilter]);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <h1 className="text-xl font-semibold sm:text-2xl">Todas las citas</h1>
-      <p className="mt-1 text-sm text-content/50">
-        {loading ? "Cargando…" : `${appointments.length} cita(s)`}
-      </p>
+    <>
+      <PageHeader
+        title="Todas las citas"
+        eyebrow={
+          loading ? "Cargando…" : `${appointments.length} citas registradas`
+        }
+        action={
+          <Link href="/" className="primary-button">
+            <Plus size={18} strokeWidth={1.8} /> Nueva cita
+          </Link>
+        }
+      />
 
-      <div className="my-6 flex flex-wrap items-center gap-3">
-        <label className="flex w-full flex-col gap-1 text-[11px] text-content/40 sm:w-auto">
-          Desde
+      <section className="toolbar">
+        <label className="search-field">
+          <Search size={19} strokeWidth={1.8} />
           <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-edge bg-surface px-4 text-sm outline-none transition focus:border-primary"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nombre o teléfono"
           />
         </label>
-        <label className="flex w-full flex-col gap-1 text-[11px] text-content/40 sm:w-auto">
-          Hasta
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="min-h-[44px] rounded-xl border border-edge bg-surface px-4 text-sm outline-none transition focus:border-primary"
-          />
-        </label>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="min-h-[44px] w-full rounded-xl border border-edge bg-surface px-4 text-sm outline-none transition focus:border-primary sm:w-auto"
-        >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          {[7, 15, 30].map((days) => (
+
+        <div className="date-range-control">
+          <button
+            className={
+              rangeActive ? "date-range-button active" : "date-range-button"
+            }
+            onClick={() => setRangeOpen((o) => !o)}
+            aria-expanded={rangeOpen}
+            aria-controls="date-range-panel"
+          >
+            <CalendarDays size={18} strokeWidth={1.8} />
+            <span>{rangeLabel}</span>
+            <ChevronRight size={15} strokeWidth={1.8} />
+          </button>
+          {rangeOpen && (
+            <div className="date-range-panel" id="date-range-panel">
+              <div className="date-range-heading">
+                <div>
+                  <strong>Filtrar por fecha</strong>
+                  <span>Selecciona un período de citas</span>
+                </div>
+                {rangeActive && (
+                  <button
+                    className="clear-range"
+                    onClick={() => {
+                      setRange({ start: "", end: "" });
+                      setQuickRange(null);
+                    }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+              <div className="quick-ranges" aria-label="Rangos rápidos">
+                {([30, 15, 7] as const).map((days) => (
+                  <button
+                    key={days}
+                    className={quickRange === days ? "selected" : ""}
+                    onClick={() => selectQuickRange(days)}
+                  >
+                    Próx. {days} días
+                  </button>
+                ))}
+              </div>
+              <div className="date-inputs">
+                <label>
+                  <span>Desde</span>
+                  <input
+                    type="date"
+                    value={range.start}
+                    max={range.end || undefined}
+                    onChange={(e) => {
+                      const start = e.target.value;
+                      setRange((r) => ({ ...r, start }));
+                      setQuickRange(null);
+                    }}
+                  />
+                </label>
+                <label>
+                  <span>Hasta</span>
+                  <input
+                    type="date"
+                    value={range.end}
+                    min={range.start || undefined}
+                    onChange={(e) => {
+                      const end = e.target.value;
+                      setRange((r) => ({ ...r, end }));
+                      setQuickRange(null);
+                    }}
+                  />
+                </label>
+              </div>
+              <button
+                className="primary-button full"
+                onClick={() => setRangeOpen(false)}
+              >
+                Aplicar rango
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="filter-tabs">
+          {FILTERS.map((f) => (
             <button
-              key={days}
-              type="button"
-              onClick={() => setQuickRange(days)}
-              className="min-h-[44px] flex-1 rounded-xl border border-edge px-3 text-xs text-content/60 transition hover:border-primary/40 hover:text-primary sm:flex-none"
+              key={f.value}
+              className={statusFilter === f.value ? "selected" : ""}
+              onClick={() => setStatusFilter(f.value)}
             >
-              Próximos {days} días
+              {f.label}
             </button>
           ))}
         </div>
-        {hasFilters && (
-          <button
-            onClick={() => {
-              setDateFrom("");
-              setDateTo("");
-              setStatusFilter("all");
-            }}
-            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-edge px-3 text-xs text-content/50 transition hover:border-primary/40 hover:text-primary sm:w-auto"
-          >
-            <X className="h-3.5 w-3.5" />
-            Limpiar filtros
-          </button>
-        )}
-      </div>
+      </section>
 
-      {error && (
-        <p className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {error}
-        </p>
-      )}
+      {error && <p className="alert alert-error">{error}</p>}
 
-      {/* Móvil: cards apiladas */}
-      <div className="space-y-3 md:hidden">
+      <section className="appointments-table">
+        <div className="table-head">
+          <span>Fecha y hora</span>
+          <span>Cliente</span>
+          <span>Teléfono</span>
+          <span>Estado</span>
+        </div>
+
         {loading ? (
-          <div className="flex h-40 items-center justify-center text-content/40">
-            <Loader2 className="h-5 w-5 animate-spin" />
+          <div className="loading-state">
+            <Loader2 className="animate-spin" size={22} />
           </div>
-        ) : appointments.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-edge py-14 text-center text-sm text-content/40">
-            No hay citas que coincidan con el filtro.
+        ) : visible.length === 0 ? (
+          <div className="empty-state">
+            <Search size={28} strokeWidth={1.8} />
+            <strong>No encontramos citas</strong>
+            <span>Prueba con otro nombre, teléfono, estado o rango de fecha.</span>
           </div>
         ) : (
-          appointments.map((a) => (
-            <article
-              key={a.id}
-              className="rounded-2xl border border-edge bg-surface p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{a.client_name}</p>
-                  <p className="mt-0.5 text-xs text-content/50">
-                    {a.client_phone}
-                  </p>
+          visible.map((a) => (
+            <article className="table-row" key={a.id}>
+              <div className="date-cell">
+                <span>{dayTag(a.appointment_date, todayKey)}</span>
+                <div>
+                  <strong>{shortDay(a.appointment_date)}</strong>
+                  <small>{formatTime(a.appointment_time)}</small>
                 </div>
-                {statusSelect(a)}
               </div>
-              <div className="mt-3 flex items-center gap-2 border-t border-edge/60 pt-3 text-sm">
-                <span className="text-content/60">
-                  {formatShortDate(a.appointment_date)}
-                </span>
-                <span className="text-content/25">·</span>
-                <span className="font-medium text-primary">
-                  {formatTime(a.appointment_time)}
-                </span>
+              <div className="person-cell">
+                <div className="client-avatar small">
+                  {initials(a.client_name)}
+                </div>
+                <div>
+                  <strong>{a.client_name}</strong>
+                  <small>{a.client_phone}</small>
+                </div>
               </div>
+              <a
+                href={waLink(a.client_phone)}
+                target="_blank"
+                rel="noreferrer"
+                className="service-cell phone-link"
+              >
+                {a.client_phone}
+              </a>
+              <label className="status-select">
+                <StatusPill status={a.status} />
+                <select
+                  aria-label={`Estado de la cita de ${a.client_name}`}
+                  value={a.status}
+                  disabled={updating === a.id}
+                  onChange={(e) =>
+                    setStatus(a.id, e.target.value as AppointmentStatus)
+                  }
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </article>
           ))
         )}
-      </div>
-
-      {/* Escritorio: tabla */}
-      <div className="hidden overflow-x-auto rounded-2xl border border-edge bg-surface md:block">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-edge text-xs uppercase tracking-wide text-content/40">
-            <tr>
-              <th className="px-4 py-3 font-medium">Fecha</th>
-              <th className="px-4 py-3 font-medium">Hora</th>
-              <th className="px-4 py-3 font-medium">Nombre</th>
-              <th className="px-4 py-3 font-medium">Teléfono</th>
-              <th className="px-4 py-3 font-medium">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="py-16 text-center text-content/40">
-                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-                </td>
-              </tr>
-            ) : appointments.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-16 text-center text-content/40">
-                  No hay citas que coincidan con el filtro.
-                </td>
-              </tr>
-            ) : (
-              appointments.map((a) => (
-                <tr
-                  key={a.id}
-                  className="border-b border-edge/60 last:border-0 transition hover:bg-surface-2"
-                >
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {formatShortDate(a.appointment_date)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-medium text-primary">
-                    {formatTime(a.appointment_time)}
-                  </td>
-                  <td className="px-4 py-3">{a.client_name}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-content/60">
-                    {a.client_phone}
-                  </td>
-                  <td className="px-4 py-3">
-                    {statusSelect(a)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      </section>
+    </>
   );
 }
