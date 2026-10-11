@@ -1,5 +1,5 @@
 import { getSupabaseServer } from "@/lib/supabase-server";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { Resend } from "resend";
 
 export const dynamic = "force-dynamic";
 
@@ -75,16 +75,34 @@ export async function POST(request: Request) {
     });
     if (error) throw error;
 
-    // Aviso opcional al dueño de Alytinc. Si falla, la solicitud ya quedó guardada.
-    const notifyPhone = (process.env.LEADS_NOTIFY_PHONE ?? "").trim();
-    if (notifyPhone) {
+    // Aviso por correo al dueño de Alytinc. Si falla o no está configurado,
+    // la solicitud ya quedó guardada y se ve en el Table Editor (tabla leads).
+    const notifyEmail = (process.env.LEADS_NOTIFY_EMAIL ?? "").trim();
+    const resendKey = (process.env.RESEND_API_KEY ?? "").trim();
+    const fromEmail =
+      (process.env.LEADS_FROM_EMAIL ?? "").trim() || "Alytinc <solicitudes@alytinc.com>";
+    if (notifyEmail && resendKey) {
       try {
-        await sendWhatsApp(
-          notifyPhone,
-          `Nueva solicitud en Alytinc\n${name}${businessName ? ` · ${businessName}` : ""}\n${TYPE_LABEL[businessType]}${city ? ` · ${city}` : ""}\nWhatsApp: ${phone}`
-        );
+        const resend = new Resend(resendKey);
+        const { error: mailError } = await resend.emails.send({
+          from: fromEmail,
+          to: notifyEmail,
+          subject: `Nueva solicitud en Alytinc: ${name}${businessName ? ` · ${businessName}` : ""}`,
+          text: [
+            "Nueva solicitud de acceso desde la landing.",
+            "",
+            `Nombre: ${name}`,
+            `Negocio: ${businessName || "—"}`,
+            `Tipo: ${TYPE_LABEL[businessType]}`,
+            `WhatsApp: ${phone}`,
+            `Ciudad: ${city || "—"}`,
+            "",
+            "Contacta al cliente para hacerle la inducción a la app.",
+          ].join("\n"),
+        });
+        if (mailError) throw mailError;
       } catch (notifyError) {
-        console.error("[leads] no se pudo avisar por WhatsApp:", notifyError);
+        console.error("[leads] no se pudo avisar por correo:", notifyError);
       }
     }
 
