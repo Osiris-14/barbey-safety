@@ -15,13 +15,11 @@ import type { Appointment, AppointmentStatus } from "@/lib/supabase";
 // leerlo como `supabase` hace pensar que es el cliente anónimo.
 import { supabaseAuth } from "@/lib/supabase-auth";
 import {
-  formatLongDate,
   formatTime,
   minutesUntil,
 } from "@/lib/schedule";
 import {
   PageHeader,
-  capitalize,
   initials,
   rdTodayKey,
   updateAppointmentStatus,
@@ -137,8 +135,8 @@ export default function AdminTodayPage() {
   return (
     <>
       <PageHeader
-        title="Agenda de hoy"
-        eyebrow={capitalize(formatLongDate(todayKey))}
+        title="Día"
+        eyebrow="Agenda diaria"
         action={
           <div className="header-actions">
             <button

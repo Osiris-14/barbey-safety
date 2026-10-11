@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ExternalLink,
   LayoutGrid,
+  Link2,
   List,
   LogOut,
   PanelLeftClose,
@@ -24,11 +25,12 @@ import "./admin.css";
 const COLLAPSED_KEY = "barbey-safety:sidebar-collapsed";
 
 const NAV = [
+  { href: "/admin", label: "Día", icon: CalendarDays },
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/admin", label: "Inicio", icon: CalendarDays },
   { href: "/admin/appointments", label: "Todas las citas", icon: List },
   { href: "/admin/servicios", label: "Catálogo", icon: Scissors },
-  { href: "/admin/blocked", label: "Bloquear horarios", icon: Ban },
+  { href: "/admin/link", label: "Link cliente", icon: Link2 },
+  { href: "/admin/blocked", label: "Cancelar horarios", icon: Ban },
 ];
 
 export default function AdminLayout({
