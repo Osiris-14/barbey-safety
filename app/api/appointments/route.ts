@@ -1,4 +1,5 @@
 import { getSupabaseServer } from "@/lib/supabase-server";
+import { isCatalogEnabled } from "@/lib/settings";
 import {
   rdClock,
   TIME_SLOTS,
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
   const date = typeof body.date === "string" ? body.date : "";
   const time = typeof body.time === "string" ? body.time : "";
   // Opcional: solo llega cuando el negocio tiene catálogo activo.
-  const serviceId = typeof body.serviceId === "string" && body.serviceId ? body.serviceId : null;
+  let serviceId = typeof body.serviceId === "string" && body.serviceId ? body.serviceId : null;
 
   if (name.length < 3 || name.length > 100) {
     return Response.json({ ok: false, error: "El nombre no es válido" }, { status: 400 });
@@ -53,6 +54,12 @@ export async function POST(request: Request) {
 
   try {
     const supabase = getSupabaseServer();
+
+    // Si el catálogo está apagado, se ignora cualquier servicio mandado
+    // (petición armada a mano): la cita se guarda igual que siempre.
+    if (serviceId) {
+      if (!(await isCatalogEnabled(supabase))) serviceId = null;
+    }
 
     // Protección básica contra reservas masivas con el mismo número.
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Service } from "@/lib/supabase";
+import { isCatalogEnabled } from "@/lib/settings";
 import {
   MONTH_NAMES,
   TIME_SLOTS,
@@ -143,9 +144,11 @@ export default function BookingPage() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  // Catálogo opcional: si viene vacío, la reserva no cambia.
+  // Catálogo opcional: solo se muestra si el negocio lo activó.
   const [services, setServices] = useState<Service[]>([]);
+  const [catalogOn, setCatalogOn] = useState(false);
   const [serviceId, setServiceId] = useState("");
+  const showCatalog = catalogOn && services.length > 0;
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,11 +208,14 @@ export default function BookingPage() {
       .catch((error) => console.error("[cita] no se pudo recuperar la cita:", error));
   }, []);
 
-  // Catálogo del negocio. Si la tabla no existe o viene vacía, se sigue
+  // Catálogo del negocio. Si está apagado o la tabla no existe, se sigue
   // sin paso extra: la reserva funciona igual que hoy.
   useEffect(() => {
     (async () => {
       try {
+        const on = await isCatalogEnabled(supabase);
+        setCatalogOn(on);
+        if (!on) return;
         const { data, error } = await supabase
           .from("services")
           .select("id, name, price, duration_min")
@@ -391,7 +397,7 @@ export default function BookingPage() {
     e.preventDefault();
     if (!selectedDate || !selectedTime || !nameValid || !phoneValid) return;
     // Con catálogo activo, el servicio es obligatorio.
-    if (services.length > 0 && !serviceId) return;
+    if (showCatalog && !serviceId) return;
     const chosen = services.find((s) => s.id === serviceId) ?? null;
 
     setSubmitting(true);
@@ -817,7 +823,7 @@ export default function BookingPage() {
                     className={[
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition",
                       complete
-                        ? "border-primary bg-primary text-night"
+                        ? "border-primary bg-primary text-white"
                         : active
                           ? "border-primary text-primary"
                           : "border-edge bg-surface text-content/40",
@@ -999,7 +1005,7 @@ export default function BookingPage() {
                 </span>
               </div>
 
-              {services.length > 0 && (
+              {showCatalog && (
                 <>
                   <label
                     htmlFor="service"
@@ -1072,7 +1078,7 @@ export default function BookingPage() {
                   !nameValid ||
                   !phoneValid ||
                   submitting ||
-                  (services.length > 0 && !serviceId)
+                  (showCatalog && !serviceId)
                 }
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-night transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
               >

@@ -9,12 +9,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        night: "#111111",
-        primary: "#C9A84C",
-        content: "#F0F0F0",
-        surface: "#1C1C1C",
-        "surface-2": "#252525",
-        edge: "#2E2E2E",
+        night: "#f5f7f6",
+        primary: "#326b5b",
+        content: "#24332d",
+        surface: "#ffffff",
+        "surface-2": "#eef2f0",
+        edge: "#e1e8e4",
       },
     },
   },

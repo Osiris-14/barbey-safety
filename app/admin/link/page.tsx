@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, ExternalLink, Link2, MessageCircle, Share2, Sparkles } from "lucide-react";
 import { supabase, type Service } from "@/lib/supabase";
+import { isCatalogEnabled } from "@/lib/settings";
 import { PageHeader } from "../_components/admin-ui";
 
 function formatPriceShort(price: string | null): string {
@@ -19,6 +20,9 @@ export default function ClientLinkPage() {
     setUrl(`${window.location.origin}/`);
     (async () => {
       try {
+        // La vista previa muestra servicios solo si el catálogo está activo,
+        // igual que lo verá el cliente.
+        if (!(await isCatalogEnabled(supabase))) return;
         const { data } = await supabase
           .from("services")
           .select("id, name, price, duration_min")

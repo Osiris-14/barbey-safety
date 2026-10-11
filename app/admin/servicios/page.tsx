@@ -28,13 +28,20 @@ export default function ServicesPage() {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [duration, setDuration] = useState(45);
+  const [catalogOn, setCatalogOn] = useState(false);
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [savingCatalog, setSavingCatalog] = useState(false);
 
   const load = useCallback(async () => {
-    const { data, error } = await supabaseAuth
-      .from("services")
-      .select("*")
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true });
+    const [svc, cfg] = await Promise.all([
+      supabaseAuth
+        .from("services")
+        .select("*")
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+      supabaseAuth.from("app_settings").select("*").eq("id", 1).maybeSingle(),
+    ]);
+    const { data, error } = svc;
 
     if (error) {
       console.error("[catálogo] no se pudo cargar:", error);
@@ -49,12 +56,44 @@ export default function ServicesPage() {
       setError(null);
       setServices((data ?? []) as Service[]);
     }
+
+    if (!cfg.error && cfg.data) {
+      setCatalogOn(cfg.data.catalog_enabled === true);
+      setSettingsReady(true);
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const toggleCatalog = async () => {
+    setSavingCatalog(true);
+    const { error } = await supabaseAuth
+      .from("app_settings")
+      .upsert(
+        {
+          id: 1,
+          catalog_enabled: !catalogOn,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
+    if (error) {
+      console.error("[catálogo] no se pudo guardar el interruptor:", error);
+      const code = (error as { code?: string }).code;
+      setError(
+        code === "42P01" || code === "PGRST205"
+          ? "Falta la tabla de ajustes: corre scripts/ajustes.sql en Supabase."
+          : `No pudimos guardar el cambio. ${error.message}`
+      );
+    } else {
+      setCatalogOn(!catalogOn);
+      setSettingsReady(true);
+    }
+    setSavingCatalog(false);
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +166,29 @@ export default function ServicesPage() {
 
       {error && <p className="alert alert-error">{error}</p>}
 
+      <section className="bot-card" style={{ marginBottom: 14 }}>
+        <div className="bot-setting" style={{ borderTop: 0, paddingTop: 0 }}>
+          <div className="bot-setting-copy">
+            <strong>Catálogo activo</strong>
+            <p>
+              Apagado, la reserva funciona igual que siempre aunque tengas
+              servicios creados. Encendido, el cliente elige servicio al reservar.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={catalogOn}
+            aria-label="Activar catálogo"
+            className={`toggle-switch ${catalogOn ? "active" : ""}`}
+            disabled={!settingsReady || savingCatalog}
+            onClick={toggleCatalog}
+          >
+            <span />
+          </button>
+        </div>
+      </section>
+
       <section className="block-layout">
         <form className="block-form-card" onSubmit={handleCreate}>
           <div className="card-heading">
@@ -186,7 +248,7 @@ export default function ServicesPage() {
             Agregar servicio
           </button>
           <p className="form-hint">
-            Al crear el primero, el cliente verá un paso extra para elegir servicio.
+            Para que el cliente lo vea, enciende el interruptor de arriba.
           </p>
         </form>
 
