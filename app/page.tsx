@@ -678,7 +678,7 @@ export default function BookingPage() {
             <button
               onClick={cancelAppointment}
               disabled={cancelling}
-              className="mt-6 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+              className="mt-6 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-500/10 disabled:opacity-50"
             >
               {cancelling ? "Cancelando…" : "Cancelar cita"}
             </button>
@@ -743,7 +743,7 @@ export default function BookingPage() {
               type="button"
               onClick={cancelSavedAppointment}
               disabled={cancelling}
-              className="mt-4 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+              className="mt-4 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-500/10 disabled:opacity-50"
             >
               {cancelling ? "Cancelando…" : "Cancelar cita"}
             </button>
@@ -768,6 +768,7 @@ export default function BookingPage() {
                 <input
                   type="tel"
                   value={lookupPhone}
+                  aria-label="WhatsApp de la cita"
                   onChange={(event) => setLookupPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
                   placeholder="WhatsApp: 809 555 0000"
                   inputMode="numeric"
@@ -776,11 +777,13 @@ export default function BookingPage() {
                 <input
                   type="date"
                   value={lookupDate}
+                  aria-label="Fecha de la cita"
                   onChange={(event) => setLookupDate(event.target.value)}
                   className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
                 />
                 <select
                   value={lookupTime}
+                  aria-label="Hora de la cita"
                   onChange={(event) => setLookupTime(event.target.value)}
                   className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
                 >
@@ -791,7 +794,7 @@ export default function BookingPage() {
                 <button
                   type="submit"
                   disabled={lookingUp || !/^\d{10}$/.test(lookupPhone) || !lookupDate}
-                  className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-night disabled:opacity-40"
+                  className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
                 >
                   {lookingUp ? "Buscando…" : "Ver mi cita"}
                 </button>
@@ -820,6 +823,7 @@ export default function BookingPage() {
 
                 <div className="relative flex flex-col items-center">
                   <div
+                    aria-current={active ? "step" : undefined}
                     className={[
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition",
                       complete
@@ -847,13 +851,13 @@ export default function BookingPage() {
 
         <div className="rounded-2xl border border-edge bg-surface p-4 sm:p-6">
           {error && (
-            <p className="mb-4 break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            <p role="alert" className="mb-4 break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           )}
 
           {availabilityError && (
-            <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+            <p role="alert" className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
               {availabilityError}
             </p>
           )}
@@ -896,8 +900,9 @@ export default function BookingPage() {
               </div>
 
               {loadingMonth ? (
-                <div className="flex h-56 items-center justify-center text-content/40">
+                <div role="status" className="flex h-56 items-center justify-center text-content/40">
                   <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="sr-only">Cargando calendario…</span>
                 </div>
               ) : (
                 <div className="grid grid-cols-7 gap-1">
@@ -912,6 +917,7 @@ export default function BookingPage() {
                         type="button"
                         disabled={disabled}
                         onClick={() => handlePickDate(date)}
+                        aria-label={formatLongDate(key)}
                         className={[
                           "aspect-square rounded-lg border text-sm transition",
                           disabled
@@ -941,8 +947,9 @@ export default function BookingPage() {
               </p>
 
               {loadingDay ? (
-                <div className="flex h-40 items-center justify-center text-content/40">
+                <div role="status" className="flex h-40 items-center justify-center text-content/40">
                   <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="sr-only">Cargando horarios…</span>
                 </div>
               ) : visibleSlots.length === 0 || allDisabled ? (
                 <p className="py-10 text-center text-sm text-content/50">
@@ -958,6 +965,7 @@ export default function BookingPage() {
                         type="button"
                         disabled={disabled}
                         onClick={() => handlePickTime(slot)}
+                        aria-label={`${formatTime(slot)}${disabled ? ", no disponible" : ""}`}
                         className={[
                           "min-h-[44px] rounded-lg border px-1 text-sm transition",
                           disabled
