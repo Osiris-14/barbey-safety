@@ -420,3 +420,30 @@ background: radial-gradient(ellipse at 50% 100%, #d9eadf, transparent 62%); }
   .alytinc-root .bar i { width: var(--w); }
   .alytinc-root .v-bars i { transform: scaleY(1); }
 }
+
+/* ── Capa Apple (solo sensación) ── */
+
+/* Cifras y horarios con ancho tabular para que no salten */
+.alytinc-root .stat strong,
+.alytinc-root .appt-time,
+.alytinc-root .v-row time,
+.alytinc-root .v-slots span,
+.alytinc-root .mock-date,
+.alytinc-root .day,
+.alytinc-root .time {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Menos transparencia: nav sólida */
+@media (prefers-reduced-transparency: reduce) {
+  .alytinc-root .nav.scrolled {
+    background: #f5f7f6;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* El CTA fijo respeta el home indicator del iPhone */
+.alytinc-root .sticky-cta {
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+}

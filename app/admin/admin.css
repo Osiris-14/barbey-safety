@@ -496,3 +496,77 @@
 .admin-app .bot-history small { color: var(--muted); font-size: 11px; }
 .admin-app .bot-next { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; padding: 12px 14px; border-radius: 12px; color: var(--muted-strong); background: var(--surface); border: 1px dashed var(--line); font-size: 12px; line-height: 1.55; }
 @media (max-width: 1050px) { .admin-app .bot-grid { grid-template-columns: 1fr; } }
+
+/* ── Capa Apple (solo sensación; no cambia estructura ni colores) ── */
+
+/* 1. Respuesta instantánea al presionar: el feedback vive en el toque */
+.admin-app button:active:not(:disabled),
+.admin-app a:active {
+  transform: scale(0.97);
+}
+.admin-app .toggle-switch:active:not(:disabled) { transform: scale(0.95); }
+.admin-app button,
+.admin-app a {
+  transition:
+    transform 100ms ease-out,
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 250ms ease;
+}
+/* Los botones principales ya traen hover con translate: el press lo pisa a propósito */
+.admin-app .primary-button:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.admin-app .nav-item:active { transform: scale(0.97); }
+
+/* 2. Cifras y horas con ancho tabular para que no salten */
+.admin-app .metric-card > strong,
+.admin-app .summary-card strong,
+.admin-app .time-column strong,
+.admin-app .bot-kpis strong,
+.admin-app .date-cell strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 3. Materiales translúcidos: el sidebar y los flotantes dejan ver el contenido */
+.admin-app .sidebar {
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  transition: width .2s ease, transform .3s cubic-bezier(0.22, 1, 0.36, 1), background .25s ease;
+}
+.admin-app .date-range-panel {
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 2px 6px rgba(31,52,43,0.08), 0 18px 48px rgba(31,52,43,0.12);
+}
+
+/* 4. Movimiento reducido: cross-fade suave, sin slides ni rebotes */
+@media (prefers-reduced-motion: reduce) {
+  .admin-app *,
+  .admin-app *::before,
+  .admin-app *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .admin-app button:active:not(:disabled),
+  .admin-app a:active {
+    transform: none;
+  }
+}
+
+/* 5. Menos transparencia: superficies sólidas */
+@media (prefers-reduced-transparency: reduce) {
+  .admin-app .sidebar,
+  .admin-app .date-range-panel {
+    background: #ffffff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* 6. Más contraste: bordes definidos */
+@media (prefers-contrast: more) {
+  .admin-app .sidebar { border-right-color: #b9c6bf; }
+  .admin-app :focus-visible { outline-width: 4px; }
+}

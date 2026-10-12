@@ -631,28 +631,33 @@ export default function BookingPage() {
 
   if (done) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-night px-4 py-8 sm:py-10">
-        <div className="w-full max-w-[420px] rounded-2xl border border-edge bg-surface p-6 text-center sm:p-8">
-          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15">
+      <main className="booking-app relative flex min-h-screen items-center justify-center overflow-hidden bg-night px-4 py-8 sm:py-10">
+        {/* Resplandor ambiental suave, solo decorativo */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 -top-40 mx-auto h-80 max-w-[560px] rounded-full bg-primary/10 blur-[120px]"
+        />
+        <div className="relative w-full max-w-[420px] rounded-[22px] border border-edge bg-surface p-6 text-center shadow-apple-lg sm:p-8">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15 shadow-apple">
             <CheckCircle2 className="h-9 w-9 text-primary" />
           </div>
-          <h1 className="text-2xl font-semibold">
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
             {done.cancelled ? "Cita cancelada" : "¡Cita agendada!"}
           </h1>
-          <p className="mt-2 text-sm text-content/60">
+          <p className="mt-2 text-[15px] leading-relaxed text-content/60">
             {done.cancelled
               ? "El horario volvió a estar disponible para otros clientes."
               : "Te esperamos en Yoan BarberShop."}
           </p>
 
-          <dl className="mt-6 space-y-3 rounded-xl border border-edge bg-surface-2 p-5 text-left text-sm">
+          <dl className="mt-6 space-y-3 rounded-2xl border border-edge bg-surface-2 p-5 text-left text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-content/50">Cliente</dt>
               <dd className="font-medium">{done.name}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-content/50">WhatsApp</dt>
-              <dd className="font-medium">{done.phone}</dd>
+              <dd className="tnum font-medium">{done.phone}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-content/50">Fecha</dt>
@@ -662,7 +667,7 @@ export default function BookingPage() {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-content/50">Hora</dt>
-              <dd className="font-medium text-primary">
+              <dd className="tnum font-semibold text-primary">
                 {formatTime(done.time)}
               </dd>
             </div>
@@ -678,7 +683,7 @@ export default function BookingPage() {
             <button
               onClick={cancelAppointment}
               disabled={cancelling}
-              className="mt-6 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-500/10 disabled:opacity-50"
+              className="mt-6 w-full rounded-[14px] border border-red-500/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-50"
             >
               {cancelling ? "Cancelando…" : "Cancelar cita"}
             </button>
@@ -686,7 +691,7 @@ export default function BookingPage() {
 
           <button
             onClick={resetAll}
-            className={`${done.cancelled ? "mt-6" : "mt-3"} w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm font-medium transition hover:border-primary/50 hover:text-primary`}
+            className={`${done.cancelled ? "mt-6" : "mt-3"} w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm font-medium transition hover:border-primary/50 hover:text-primary active:scale-[0.98]`}
           >
             Agendar otra cita
           </button>
@@ -715,27 +720,32 @@ export default function BookingPage() {
     visibleSlots.length > 0 && visibleSlots.every((s) => slotState(s).disabled);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-night px-4 py-8 sm:py-10">
-      <div className="w-full max-w-[420px]">
+    <main className="booking-app relative flex min-h-screen items-center justify-center overflow-hidden bg-night px-4 py-8 sm:py-10">
+      {/* Resplandor ambiental suave, solo decorativo */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 -top-40 mx-auto h-80 max-w-[560px] rounded-full bg-primary/10 blur-[120px]"
+      />
+      <div className="relative w-full max-w-[420px]">
         <header className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-edge bg-surface">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-[16px] border border-edge bg-surface shadow-apple">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/logo.jpeg"
               alt="Yoan BarberShop"
-              style={{ width: 40, height: 40, objectFit: "contain" }}
+              style={{ width: 44, height: 44, objectFit: "contain" }}
             />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-[28px] font-semibold leading-tight tracking-tight">
             Yoan BarberShop
           </h1>
-          <p className="mt-1 text-sm text-content/60">Agenda tu cita</p>
+          <p className="mt-1 text-[15px] text-content/60">Agenda tu cita</p>
         </header>
 
         {savedAppointment && (
-          <section className="mb-6 rounded-2xl border border-primary/40 bg-primary/10 p-4">
-            <p className="text-sm font-semibold text-primary">Tu cita guardada</p>
-            <p className="mt-1 text-sm capitalize text-content/80">
+          <section className="mb-6 rounded-[22px] border border-primary/30 bg-primary/10 p-4 shadow-apple">
+            <p className="text-sm font-semibold tracking-tight text-primary">Tu cita guardada</p>
+            <p className="tnum mt-1 text-sm capitalize text-content/80">
               {formatLongDate(savedAppointment.appointment_date)} · {formatTime(savedAppointment.appointment_time)}
             </p>
             <p className="mt-1 text-xs text-content/50">{savedAppointment.client_name}</p>
@@ -743,7 +753,7 @@ export default function BookingPage() {
               type="button"
               onClick={cancelSavedAppointment}
               disabled={cancelling}
-              className="mt-4 w-full rounded-xl border border-red-500/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-500/10 disabled:opacity-50"
+              className="mt-4 w-full rounded-[14px] border border-red-500/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-500/10 active:scale-[0.98] disabled:opacity-50"
             >
               {cancelling ? "Cancelando…" : "Cancelar cita"}
             </button>
@@ -751,7 +761,7 @@ export default function BookingPage() {
         )}
 
         {!savedAppointment && (
-          <section className="mb-6 rounded-2xl border border-edge bg-surface p-4">
+          <section className="mb-6 rounded-[22px] border border-edge bg-surface p-4 shadow-apple">
             <button
               type="button"
               onClick={() => setShowLookup((open) => !open)}
@@ -762,7 +772,7 @@ export default function BookingPage() {
 
             {showLookup && (
               <form onSubmit={lookupAppointment} className="mt-4 space-y-3">
-                <p className="text-xs text-content/50">
+                <p className="text-xs leading-relaxed text-content/50">
                   Escribe los mismos datos usados al reservar para ver el botón de cancelación.
                 </p>
                 <input
@@ -772,20 +782,20 @@ export default function BookingPage() {
                   onChange={(event) => setLookupPhone(event.target.value.replace(/\D/g, "").slice(0, 10))}
                   placeholder="WhatsApp: 809 555 0000"
                   inputMode="numeric"
-                  className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
+                  className="tnum w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition placeholder:text-content/25 focus:border-primary focus:shadow-apple"
                 />
                 <input
                   type="date"
                   value={lookupDate}
                   aria-label="Fecha de la cita"
                   onChange={(event) => setLookupDate(event.target.value)}
-                  className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-primary focus:shadow-apple"
                 />
                 <select
                   value={lookupTime}
                   aria-label="Hora de la cita"
                   onChange={(event) => setLookupTime(event.target.value)}
-                  className="w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
+                  className="w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-primary focus:shadow-apple"
                 >
                   {TIME_SLOTS.map((slot) => (
                     <option key={slot} value={slot}>{formatTime(slot)}</option>
@@ -794,7 +804,7 @@ export default function BookingPage() {
                 <button
                   type="submit"
                   disabled={lookingUp || !/^\d{10}$/.test(lookupPhone) || !lookupDate}
-                  className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white disabled:opacity-40"
+                  className="w-full rounded-[14px] bg-primary px-4 py-3 text-sm font-semibold text-white shadow-apple transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
                 >
                   {lookingUp ? "Buscando…" : "Ver mi cita"}
                 </button>
@@ -825,11 +835,11 @@ export default function BookingPage() {
                   <div
                     aria-current={active ? "step" : undefined}
                     className={[
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition",
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition active:scale-95",
                       complete
-                        ? "border-primary bg-primary text-white"
+                        ? "border-primary bg-primary text-white shadow-apple"
                         : active
-                          ? "border-primary text-primary"
+                          ? "border-primary text-primary shadow-[0_0_0_4px_rgba(50,107,91,0.12)]"
                           : "border-edge bg-surface text-content/40",
                     ].join(" ")}
                   >
@@ -849,15 +859,15 @@ export default function BookingPage() {
           })}
         </div>
 
-        <div className="rounded-2xl border border-edge bg-surface p-4 sm:p-6">
+        <div className="rounded-[22px] border border-edge bg-surface p-4 shadow-apple-lg sm:p-6">
           {error && (
-            <p role="alert" className="mb-4 break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700">
+            <p role="alert" className="mb-4 break-words rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           )}
 
           {availabilityError && (
-            <p role="alert" className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+            <p role="alert" className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
               {availabilityError}
             </p>
           )}
@@ -865,7 +875,7 @@ export default function BookingPage() {
           {/* ---------------------------- Paso 1: fecha --------------------------- */}
           {step === 1 && (
             <section>
-              <div className="mb-4 flex items-center gap-2 text-sm font-medium">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-tight">
                 <CalendarDays className="h-4 w-4 text-primary" />
                 Selecciona una fecha
               </div>
@@ -875,18 +885,18 @@ export default function BookingPage() {
                   type="button"
                   disabled={!canGoPrev}
                   onClick={() => setCursor(new Date(year, month - 1, 1))}
-                  className="rounded-lg border border-edge p-2 text-content/70 transition hover:text-primary disabled:opacity-30 disabled:hover:text-content/70"
+                  className="rounded-xl border border-edge bg-surface-2 p-2 text-content/70 transition hover:text-primary active:scale-95 disabled:opacity-30 disabled:hover:text-content/70"
                   aria-label="Mes anterior"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="text-sm font-medium">
+                <span className="tnum text-sm font-semibold tracking-tight">
                   {MONTH_NAMES[month]} {year}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCursor(new Date(year, month + 1, 1))}
-                  className="rounded-lg border border-edge p-2 text-content/70 transition hover:text-primary"
+                  className="rounded-xl border border-edge bg-surface-2 p-2 text-content/70 transition hover:text-primary active:scale-95"
                   aria-label="Mes siguiente"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -919,11 +929,11 @@ export default function BookingPage() {
                         onClick={() => handlePickDate(date)}
                         aria-label={formatLongDate(key)}
                         className={[
-                          "aspect-square rounded-lg border text-sm transition",
+                          "tnum aspect-square rounded-xl border text-sm transition active:scale-95",
                           disabled
                             ? "cursor-not-allowed border-transparent text-content/20"
-                            : "border-edge bg-surface-2 hover:border-primary hover:text-primary",
-                          isToday && !disabled ? "border-primary/60" : "",
+                            : "border-edge bg-surface-2 hover:border-primary hover:text-primary hover:shadow-apple",
+                          isToday && !disabled ? "border-primary/60 shadow-[0_0_0_3px_rgba(50,107,91,0.12)]" : "",
                         ].join(" ")}
                       >
                         {date.getDate()}
@@ -938,7 +948,7 @@ export default function BookingPage() {
           {/* ----------------------------- Paso 2: hora --------------------------- */}
           {step === 2 && selectedDate && (
             <section>
-              <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+              <div className="mb-1 flex items-center gap-2 text-sm font-semibold tracking-tight">
                 <Clock className="h-4 w-4 text-primary" />
                 Selecciona una hora
               </div>
@@ -967,10 +977,10 @@ export default function BookingPage() {
                         onClick={() => handlePickTime(slot)}
                         aria-label={`${formatTime(slot)}${disabled ? ", no disponible" : ""}`}
                         className={[
-                          "min-h-[44px] rounded-lg border px-1 text-sm transition",
+                          "tnum min-h-[44px] rounded-xl border px-1 text-sm transition active:scale-95",
                           disabled
                             ? "cursor-not-allowed border-edge/60 text-content/25 line-through"
-                            : "border-edge bg-surface-2 hover:border-primary hover:text-primary",
+                            : "border-edge bg-surface-2 hover:border-primary hover:text-primary hover:shadow-apple",
                         ].join(" ")}
                       >
                         {formatTime(slot)}
@@ -999,16 +1009,16 @@ export default function BookingPage() {
           {/* ---------------------------- Paso 3: datos --------------------------- */}
           {step === 3 && selectedDate && selectedTime && (
             <form onSubmit={handleSubmit}>
-              <div className="mb-4 flex items-center gap-2 text-sm font-medium">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-tight">
                 <User className="h-4 w-4 text-primary" />
                 Tus datos
               </div>
 
-              <div className="mb-5 flex items-center justify-between rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm">
+              <div className="mb-5 flex items-center justify-between rounded-2xl border border-edge bg-surface-2 px-4 py-3 text-sm">
                 <span className="capitalize text-content/70">
                   {formatLongDate(selectedDate)}
                 </span>
-                <span className="font-semibold text-primary">
+                <span className="tnum font-semibold text-primary">
                   {formatTime(selectedTime)}
                 </span>
               </div>
@@ -1026,7 +1036,7 @@ export default function BookingPage() {
                     value={serviceId}
                     onChange={(e) => setServiceId(e.target.value)}
                     required
-                    className="mb-4 w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-primary"
+                    className="mb-4 w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-primary focus:shadow-apple"
                   >
                     <option value="">Elige un servicio…</option>
                     {services.map((s) => (
@@ -1045,13 +1055,13 @@ export default function BookingPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Juan Pérez"
                 required
-                className="mb-4 w-full rounded-xl border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition placeholder:text-content/25 focus:border-primary"
+                className="mb-4 w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition placeholder:text-content/25 focus:border-primary focus:shadow-apple"
               />
 
               <label className="mb-1.5 block text-xs text-content/60">
                 WhatsApp
               </label>
-              <div className="mb-1 flex w-full overflow-hidden rounded-xl border border-edge bg-surface-2 transition focus-within:border-primary">
+              <div className="mb-1 flex w-full overflow-hidden rounded-[14px] border border-edge bg-surface-2 transition focus-within:border-primary focus-within:shadow-apple">
                 <span className="flex shrink-0 select-none items-center gap-1.5 border-r border-edge px-3 text-sm text-content/60">
                   <Phone className="h-4 w-4 text-content/30" />
                   +1
@@ -1088,7 +1098,7 @@ export default function BookingPage() {
                   submitting ||
                   (showCatalog && !serviceId)
                 }
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-night transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
+                className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-primary px-4 py-3 text-sm font-semibold text-white shadow-apple transition hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100"
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                 {submitting ? "Agendando…" : "Confirmar cita"}

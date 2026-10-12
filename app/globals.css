@@ -18,7 +18,47 @@ body {
 }
 
 body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Títulos: tracking negativo como SF Display (el admin y Alytinc traen el suyo) */
+.booking-app h1 {
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+/* Horas y cifras con ancho tabular para que no salten al cambiar */
+.booking-app .tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Feedback instantáneo al presionar (solo reserva; admin y Alytinc traen el suyo) */
+.booking-app button:active:not(:disabled),
+.booking-app a:active {
+  transform: scale(0.98);
+}
+.booking-app button,
+.booking-app a {
+  transition:
+    transform 100ms ease-out,
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 250ms ease,
+    filter 200ms ease;
+}
+
+/* Foco visible claro para teclado */
+.booking-app :focus-visible {
+  outline: 2px solid rgba(50, 107, 91, 0.7);
+  outline-offset: 2px;
 }
 
 /* Inputs nativos en tema claro */
@@ -46,4 +86,25 @@ select {
 *::-webkit-scrollbar-thumb {
   background-color: var(--edge);
   border-radius: 9999px;
+}
+
+/* Movimiento reducido: cross-fade suave, sin slides ni rebotes */
+@media (prefers-reduced-motion: reduce) {
+  .booking-app *,
+  .booking-app *::before,
+  .booking-app *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .booking-app button:active:not(:disabled),
+  .booking-app a:active {
+    transform: none;
+  }
+}
+
+/* Más contraste: bordes definidos en la reserva */
+@media (prefers-contrast: more) {
+  .booking-app :focus-visible {
+    outline-width: 3px;
+  }
 }
