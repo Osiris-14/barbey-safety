@@ -570,3 +570,160 @@
   .admin-app .sidebar { border-right-color: #b9c6bf; }
   .admin-app :focus-visible { outline-width: 4px; }
 }
+
+/* ── Rediseño visual (inspirado en apps premium de reservas + métricas fintech) ──
+   Solo presentación: no toca estructura, clases ni comportamiento. */
+
+/* 0. Ambiente: lavado radial sutil sobre el fondo */
+.admin-app {
+  background:
+    radial-gradient(900px 320px at 85% -80px, rgba(50, 107, 91, 0.07), transparent 60%),
+    radial-gradient(700px 280px at 10% 0%, rgba(195, 155, 61, 0.06), transparent 55%),
+    var(--bg);
+}
+
+/* 1. Cabecera: eyebrow estilo kicker + primario con gradiente */
+.admin-app .eyebrow {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green-dark);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.admin-app .page-header .primary-button {
+  background: linear-gradient(180deg, #3a7a66, var(--green-dark));
+  box-shadow: 0 8px 22px rgba(50, 107, 91, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.admin-app .page-header .primary-button:hover { transform: translateY(-1px); }
+
+/* 2. Tarjetas de resumen estilo fintech */
+.admin-app .summary-card,
+.admin-app .metric-card {
+  border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(31, 52, 43, 0.05), 0 12px 32px rgba(31, 52, 43, 0.08);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+}
+.admin-app .summary-card:hover,
+.admin-app .metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(31, 52, 43, 0.05), 0 18px 44px rgba(31, 52, 43, 0.12);
+}
+.admin-app .summary-card.featured {
+  background:
+    radial-gradient(420px 200px at 90% 0%, rgba(195, 155, 61, 0.16), transparent 60%),
+    linear-gradient(135deg, rgba(195, 155, 61, 0.12), rgba(195, 155, 61, 0.03)),
+    var(--surface);
+  border-color: #e7dcc0;
+}
+.admin-app .summary-card.featured strong { font-size: 36px; }
+.admin-app .summary-icon,
+.admin-app .metric-icon {
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* 3. Timeline: las filas flotan como tarjetas sobre el riel */
+.admin-app .timeline {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+  display: grid;
+  gap: 10px;
+}
+.admin-app .appointment-row {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(31, 52, 43, 0.05), 0 10px 28px rgba(31, 52, 43, 0.07);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease, border-color 0.2s ease;
+}
+.admin-app .appointment-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(31, 52, 43, 0.05), 0 16px 40px rgba(31, 52, 43, 0.11);
+}
+/* Acento lateral según estado (vía :has, sin tocar el marcado) */
+.admin-app .appointment-row:has(.tag-next) { border-left: 3px solid var(--gold); }
+.admin-app .appointment-row:has(.tag-confirmed) { border-left: 3px solid #2b7d4e; }
+.admin-app .appointment-row:has(.tag-no_show) { border-left: 3px solid var(--red); }
+.admin-app .appointment-row.cancelled { border-left: 3px solid var(--muted); }
+/* Nodo del riel teñido según estado */
+.admin-app .appointment-row:has(.tag-next) .timeline-line i { border-color: var(--gold); box-shadow: 0 0 0 4px rgba(195, 155, 61, 0.15); }
+.admin-app .appointment-row:has(.tag-confirmed) .timeline-line i { border-color: #2b7d4e; box-shadow: 0 0 0 4px rgba(43, 125, 78, 0.12); }
+.admin-app .appointment-row:has(.tag-no_show) .timeline-line i { border-color: var(--red); box-shadow: 0 0 0 4px rgba(181, 71, 71, 0.12); }
+/* Estados vacíos/cargando dentro del timeline recuperan su tarjeta */
+.admin-app .timeline .empty-state,
+.admin-app .timeline .loading-state {
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}
+.admin-app .empty-state svg { color: var(--gold); }
+.admin-app .client-avatar {
+  background: linear-gradient(150deg, #eef4f0, #dde8e1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* 4. Toolbar flotante y fija al hacer scroll */
+.admin-app .toolbar {
+  position: sticky;
+  top: 12px;
+  z-index: 15;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 1px 2px rgba(31, 52, 43, 0.05), 0 12px 32px rgba(31, 52, 43, 0.1);
+}
+/* Segmentos estilo iOS */
+.admin-app .filter-tabs {
+  border-radius: 14px;
+  box-shadow: inset 0 1px 2px rgba(31, 52, 43, 0.05);
+}
+.admin-app .filter-tabs button.selected {
+  box-shadow: 0 2px 8px rgba(50, 107, 91, 0.18);
+}
+.admin-app .period-switch button.selected {
+  box-shadow: 0 4px 12px rgba(36, 84, 70, 0.35);
+}
+
+/* 5. Listas y tarjetas con más aire */
+.admin-app .table-row { transition: background 0.15s ease; }
+.admin-app .table-row:hover { background: #f6faf8; }
+.admin-app .block-row,
+.admin-app .bot-card,
+.admin-app .link-card,
+.admin-app .analytics-card,
+.admin-app .block-form-card,
+.admin-app .phone-mock {
+  border-radius: 20px;
+  box-shadow: 0 1px 2px rgba(31, 52, 43, 0.05), 0 12px 32px rgba(31, 52, 43, 0.07);
+}
+
+/* 6. Login en vidrio */
+.admin-app.login-screen { min-height: 100vh; }
+.admin-app .login-card {
+  border-radius: 24px;
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: 0 2px 6px rgba(31, 52, 43, 0.08), 0 24px 64px rgba(31, 52, 43, 0.14);
+}
+
+/* 7. Avisos con radio amplio */
+.admin-app .alert { border-radius: 14px; }
+
+/* ── Responsive del rediseño ── */
+@media (max-width: 760px) {
+  .admin-app .toolbar { top: 8px; }
+  .admin-app .appointment-row { border-radius: 16px; }
+}
