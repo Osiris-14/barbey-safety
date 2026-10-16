@@ -44,6 +44,12 @@ function serviceOptionLabel(s: Service): string {
   return `${s.name} · ${price} · ${s.duration_min} min`;
 }
 
+/** Precio corto para las tarjetas de servicio ("RD$ 500" o "A convenir") */
+function formatServicePrice(price: string | null): string {
+  if (price === null || Number.isNaN(Number(price))) return "A convenir";
+  return `RD$ ${Number(price).toLocaleString("es-DO", { maximumFractionDigits: 2 })}`;
+}
+
 /** Arma un texto legible con lo que devuelve PostgREST (code, message, details, hint) */
 function describeError(err: unknown): string {
   if (err && typeof err === "object") {
@@ -1025,26 +1031,61 @@ export default function BookingPage() {
 
               {showCatalog && (
                 <>
-                  <label
-                    htmlFor="service"
-                    className="mb-1.5 block text-xs text-content/60"
+                  <span
+                    id="service-label"
+                    className="mb-1.5 block text-xs font-semibold tracking-wide text-content/60"
                   >
                     Servicio
-                  </label>
-                  <select
-                    id="service"
-                    value={serviceId}
-                    onChange={(e) => setServiceId(e.target.value)}
-                    required
-                    className="mb-4 w-full rounded-[14px] border border-edge bg-surface-2 px-4 py-3 text-sm outline-none transition focus:border-primary focus:shadow-apple"
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby="service-label"
+                    className="mb-4 grid gap-2"
                   >
-                    <option value="">Elige un servicio…</option>
-                    {services.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {serviceOptionLabel(s)}
-                      </option>
-                    ))}
-                  </select>
+                    {services.map((s) => {
+                      const selected = serviceId === s.id;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => setServiceId(s.id)}
+                          className={[
+                            "flex w-full items-center justify-between gap-3 rounded-[14px] border px-4 py-3 text-left text-sm transition active:scale-[0.98]",
+                            selected
+                              ? "border-primary bg-primary/10 shadow-apple"
+                              : "border-edge bg-surface-2 hover:border-primary/50 hover:shadow-apple",
+                          ].join(" ")}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-semibold tracking-tight">
+                              {s.name}
+                            </span>
+                            <span className="tnum mt-0.5 block text-xs text-content/50">
+                              {s.duration_min} min
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <span className="tnum font-semibold text-primary">
+                              {formatServicePrice(s.price)}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={[
+                                "flex h-5 w-5 items-center justify-center rounded-full border transition",
+                                selected
+                                  ? "border-primary bg-primary text-white"
+                                  : "border-edge text-transparent",
+                              ].join(" ")}
+                            >
+                              <Check className="h-3 w-3" />
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </>
               )}
 
